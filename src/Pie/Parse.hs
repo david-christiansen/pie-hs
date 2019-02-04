@@ -106,6 +106,11 @@ char =
                    }
             return c
 
+litChar :: Char -> Parser ()
+litChar c =
+  do c' <- char
+     if c == c' then pure () else failure (ExpectedChar c)
+
 located :: Parser a -> Parser (Located a)
 located p =
   do file <- currentFile <$> getContext
@@ -150,21 +155,47 @@ regex name rx =
   where
     theRegex = ICU.regex [] (T.pack ('^' : rx))
 
+hashLang :: Parser ()
+hashLang = regex (T.pack "language identification") "#lang pie" *> eatSpaces
 
 ident :: Parser Text
 ident = regex (T.pack "identifier") "[\\p{Letter}-][\\p{Letter}0-9₀₁₂₃₄₅₆₇₈₉-]*"
 
+varName =
+  do x <- Symbol <$> ident
+     if x `elem` pieKeywords
+       then failure (Expected (T.pack "valid name"))
+       else return (Var x)
 
+kw k = regex (T.pack k) k
+
+eatSpaces :: Parser ()
+eatSpaces = spanning isSpace *> pure ()
+
+parens :: Parser a -> Parser a
+parens p = litChar '(' *> p <* litChar ')'
 
 expr :: Parser Expr
-expr = Expr <$> located expr'
+expr = (Expr <$> located expr') <* eatSpaces
 
 expr' :: Parser Expr'
-expr' = u <|> nat <|> compound
+expr' = u <|> nat <|> natLit <|> varName <|> compound
   where
     u = string "U" *> pure U
     nat = string "Nat" *> pure Nat
+    tick = Tick . Symbol <$> (litChar '\'' *> ident)
+    natLit = do i <- read . T.unpack <$> regex (T.pack "natural number literal") "[0-9]+"
+                makeNat i
 
+    compound =
+      parens (add1 <|> _)
+
+    add1 = Add1 <$> (kw "add1" *> eatSpaces *> expr)
+
+    makeNat :: Integer -> Parser Expr'
+    makeNat i
+      | i < 1 = return Zero
+      | otherwise = Add1 . Expr <$> located (makeNat (i - 1))
 
 testParser :: Parser a -> String -> Either (Positioned ParseErr) a
 testParser (Parser p) input =
