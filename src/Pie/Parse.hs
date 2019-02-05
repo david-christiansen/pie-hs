@@ -221,7 +221,7 @@ expr' = u <|> nat <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compoun
                 makeNat i
 
     compound =
-      parens (add1 <|> lambda <|> pi <|> app)
+      parens (add1 <|> lambda <|> pi <|> the <|> app)
 
     add1 = kw "add1" *> (Add1 <$> expr)
 
@@ -229,6 +229,8 @@ expr' = u <|> nat <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compoun
       where argList = parens (rep varName)
 
     pi = kw "Pi" *> (Pi <$> parens (rep1 (parens (pair <$> varName <*> expr))) <*> expr)
+
+    the = kw "the" *> (The <$> expr <*> expr)
 
     app = App <$> expr <*> expr <*> rep expr
 

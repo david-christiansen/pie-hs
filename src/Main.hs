@@ -19,5 +19,7 @@ repl =
      case e of
        Left err -> print err
        Right expr ->
-         print $ runElab (isType expr) None (Loc "<interactive>" (Pos 1 0) (Pos 1 (length l)))
+         case runElab (isType expr) None (Loc "<interactive>" (Pos 1 0) (Pos 1 (length l))) of
+           Left _ -> print $ runElab (synth expr) None (Loc "<interactive>" (Pos 1 0) (Pos 1 (length l)))
+           Right ok -> print ok
      main

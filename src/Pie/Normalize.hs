@@ -67,6 +67,7 @@ eval (CTick x) = return (VTick x)
 eval CAtom     = return VAtom
 eval CZero     = return VZero
 eval (CAdd1 n) = VAdd1 <$> eval n
+eval CNat      = return VNat
 eval (CVar x)  = var x
 eval (CPi x dom ran) =
   VPi x <$> eval dom <*> close ran
@@ -77,27 +78,29 @@ eval (CApp rator rand) =
      arg <- eval rand
      apply fun arg
 eval CU = return VU
+eval (CThe _ e) = eval e
+
 
 apply :: Value -> Value -> Norm Value
 apply (VLambda x clos) arg =
   instantiate clos x arg
 apply (VNeu (VPi x a b) f) arg =
   VNeu <$> (instantiate b x arg)
-       <*> pure (NApp f (The a arg))
+       <*> pure (NApp f (NThe a arg))
 apply other arg = panic ("Not a function: " ++ show other)
 
 readBack :: Normal -> Norm Core
-readBack (The VAtom (VTick x)) = return (CTick x)
-readBack (The VNat  VZero) = return CZero
-readBack (The VNat (VAdd1 k)) = CAdd1 <$> readBack (The VNat k)
-readBack (The (VPi x dom ran) fun) =
+readBack (NThe VAtom (VTick x)) = return (CTick x)
+readBack (NThe VNat  VZero) = return CZero
+readBack (NThe VNat (VAdd1 k)) = CAdd1 <$> readBack (NThe VNat k)
+readBack (NThe (VPi x dom ran) fun) =
   do y <- fresh x
      let yVal = VNeu dom (NVar y)
      bodyVal <- apply fun yVal
      bodyType <- instantiate ran x yVal
-     CLambda y <$> readBack (The bodyType bodyVal)
-readBack (The VU t) = readBackType t
-readBack (The t (VNeu t' neu)) = readBackNeutral neu
+     CLambda y <$> readBack (NThe bodyType bodyVal)
+readBack (NThe VU t) = readBackType t
+readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
 
 readBackType :: Value -> Norm Core
 readBackType VAtom = return CAtom

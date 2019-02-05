@@ -76,6 +76,7 @@ data Expr' = Tick Symbol
            | Lambda [Symbol] Expr
            | App Expr Expr [Expr]
            | U
+           | The Expr Expr
   deriving Show
 
 data Core = CTick Symbol
@@ -88,6 +89,7 @@ data Core = CTick Symbol
           | CLambda Symbol Core
           | CApp Core Core
           | CU
+          | CThe Core Core
   deriving Show
 
 data Value = VTick Symbol
@@ -105,7 +107,7 @@ data Neutral = NVar Symbol
              | NApp Neutral Normal
   deriving Show
 
-data Normal = The { normType :: Value, normVal :: Value }
+data Normal = NThe { normType :: Value, normVal :: Value }
   deriving Show
 
 data Closure a = Closure (Env a) Core
