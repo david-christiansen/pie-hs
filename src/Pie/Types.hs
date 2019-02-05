@@ -1,5 +1,6 @@
 module Pie.Types where
 
+import Data.List.NonEmpty (NonEmpty)
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -71,9 +72,9 @@ data Expr' = Tick Symbol
            | Add1 Expr
            | Nat
            | Var Symbol
-           | Pi [(Symbol, Expr)] Expr
+           | Pi (NonEmpty (Symbol, Expr)) Expr
            | Lambda [Symbol] Expr
-           | App Expr [Expr]
+           | App Expr Expr [Expr]
            | U
   deriving Show
 
@@ -112,5 +113,7 @@ data Closure a = Closure (Env a) Core
 
 type Env a = Bwd (Symbol, a)
 
-data Message a = MText Text | MVal a
 
+
+data MessagePart a = MText Text | MVal a
+  deriving Show

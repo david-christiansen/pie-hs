@@ -2,6 +2,8 @@ module Pie.Parse where
 
 import Control.Applicative
 import Data.Char
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.ICU as ICU
@@ -70,6 +72,12 @@ instance Monad Parser where
                 Right (x, st') ->
                   runParser (f x) ctx st')
 
+eof :: Parser ()
+eof = Parser (\ _ st ->
+                if T.null (currentInput st)
+                  then Right ((), st)
+                  else Left (Positioned (currentPos st) (Expected (T.pack "EOF"))))
+
 failure :: ParseErr -> Parser a
 failure e = Parser (\ _ st -> Left (Positioned (currentPos st) e))
 
@@ -92,6 +100,11 @@ forwardLine (Pos line col) = Pos (line + 1) 1
 forwardCol :: Pos -> Pos
 forwardCol (Pos line col) = Pos line (col + 1)
 
+forwardCols :: Int -> Pos -> Pos
+forwardCols n (Pos line col) = Pos line (col + n)
+
+
+
 char :: Parser Char
 char =
   do st <- get
@@ -110,6 +123,13 @@ litChar :: Char -> Parser ()
 litChar c =
   do c' <- char
      if c == c' then pure () else failure (ExpectedChar c)
+
+rep :: Parser a -> Parser [a]
+rep p = ((:) <$> p <*> (rep p)) <|> pure []
+
+rep1 :: Parser a -> Parser (NonEmpty a)
+rep1 p = (:|) <$> p <*> rep p
+
 
 located :: Parser a -> Parser (Located a)
 located p =
@@ -147,9 +167,13 @@ regex name rx =
          do let rest = T.drop (T.length matching) input
             case T.lines matching of
               [] -> modify (\st -> st { currentInput = rest })
+              [l] -> modify (\st -> st { currentInput = rest
+                                       , currentPos = forwardCols (T.length l) (currentPos st)
+                                       })
               ls -> modify (\st -> st { currentInput = rest
-                                      , currentPos = let Pos l c = currentPos st
-                                                     in Pos (l + length ls) (c + T.length (last ls))
+                                      , currentPos =
+                                          let Pos l c = currentPos st
+                                          in Pos (l + length ls - 1) (T.length (last ls))
                                       })
             return matching
   where
@@ -161,36 +185,52 @@ hashLang = regex (T.pack "language identification") "#lang pie" *> eatSpaces
 ident :: Parser Text
 ident = regex (T.pack "identifier") "[\\p{Letter}-][\\p{Letter}0-9₀₁₂₃₄₅₆₇₈₉-]*"
 
+token :: Parser a -> Parser a
+token p = p <* eatSpaces
+
 varName =
+  token $
   do x <- Symbol <$> ident
      if x `elem` pieKeywords
        then failure (Expected (T.pack "valid name"))
-       else return (Var x)
+       else return x
 
-kw k = regex (T.pack k) k
+kw k = token (regex (T.pack k) k)
 
 eatSpaces :: Parser ()
 eatSpaces = spanning isSpace *> pure ()
 
 parens :: Parser a -> Parser a
-parens p = litChar '(' *> p <* litChar ')'
+parens p = token (litChar '(') *> p <* token (litChar ')')
+
+pair x y = (x, y)
 
 expr :: Parser Expr
-expr = (Expr <$> located expr') <* eatSpaces
+expr = Expr <$> located expr'
 
 expr' :: Parser Expr'
-expr' = u <|> nat <|> natLit <|> varName <|> compound
+expr' = u <|> nat <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compound
   where
-    u = string "U" *> pure U
-    nat = string "Nat" *> pure Nat
-    tick = Tick . Symbol <$> (litChar '\'' *> ident)
-    natLit = do i <- read . T.unpack <$> regex (T.pack "natural number literal") "[0-9]+"
+    u = kw "U" *> pure U
+    nat = kw "Nat" *> pure Nat
+    atom = kw "Atom" *> pure Atom
+    zero = kw "zero" *> pure Zero
+    tick = Tick . Symbol <$> (litChar '\'' *> ident) -- TODO separate atom name from var name - atom name has fewer possibilities!
+    natLit = do i <- read . T.unpack <$>
+                       token (regex (T.pack "natural number literal") "[0-9]+")
                 makeNat i
 
     compound =
-      parens (add1 <|> _)
+      parens (add1 <|> lambda <|> pi <|> app)
 
-    add1 = Add1 <$> (kw "add1" *> eatSpaces *> expr)
+    add1 = kw "add1" *> (Add1 <$> expr)
+
+    lambda = kw "lambda" *> (Lambda <$> argList <*> expr)
+      where argList = parens (rep varName)
+
+    pi = kw "Pi" *> (Pi <$> parens (rep1 (parens (pair <$> varName <*> expr))) <*> expr)
+
+    app = App <$> expr <*> expr <*> rep expr
 
     makeNat :: Integer -> Parser Expr'
     makeNat i
