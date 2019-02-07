@@ -85,6 +85,8 @@ data Expr' e = Tick Symbol
              | Cons e e
              | Car e
              | Cdr e
+             | Trivial
+             | Sole
              | U
              | The e e
   deriving Show
@@ -103,6 +105,8 @@ data Core = CTick Symbol
           | CCons Core Core
           | CCar Core
           | CCdr Core
+          | CTrivial
+          | CSole
           | CU
           | CThe Core Core
   deriving Show
@@ -116,6 +120,8 @@ data Value = VTick Symbol
            | VLambda Symbol (Closure Value)
            | VSigma Symbol Value (Closure Value)
            | VCons Value Value
+           | VTrivial
+           | VSole
            | VU
            | VNeu Value Neutral
   deriving Show

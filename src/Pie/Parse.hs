@@ -209,12 +209,14 @@ expr :: Parser Expr
 expr = Expr <$> located expr'
 
 expr' :: Parser (Expr' Expr)
-expr' = u <|> nat <|> tick <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compound
+expr' = u <|> nat <|> triv <|> sole <|> tick <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compound
   where
     u = kw "U" *> pure U
     nat = kw "Nat" *> pure Nat
     atom = kw "Atom" *> pure Atom
     zero = kw "zero" *> pure Zero
+    triv = kw "Trivial" *> pure Trivial
+    sole = kw "sole" *> pure Sole
     tick = Tick . Symbol <$> (litChar '\'' *> ident) -- TODO separate atom name from var name - atom name has fewer possibilities!
     natLit = do i <- read . T.unpack <$>
                        token (regex (T.pack "natural number literal") "[0-9]+")

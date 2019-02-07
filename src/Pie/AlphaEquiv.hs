@@ -75,6 +75,8 @@ equiv e1 e2 =
       equiv a1 a2 *> equiv d1 d2
     (CCar p1, CCar p2) -> equiv p1 p2
     (CCdr p1, CCdr p2) -> equiv p1 p2
+    (CTrivial, CTrivial) -> yes
+    (CSole, CSole) -> yes
     (CU, CU) ->
       yes
     (CThe t1 e1, CThe t2 e2) ->

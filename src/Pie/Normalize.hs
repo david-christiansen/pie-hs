@@ -88,6 +88,8 @@ eval (CSigma x a d) =
 eval (CCons a d) = VCons <$> eval a <*> eval d
 eval (CCar p) = eval p >>= doCar
 eval (CCdr p) = eval p >>= doCdr
+eval CTrivial = return VTrivial
+eval CSole = return VSole
 eval CU = return VU
 eval (CThe _ e) = eval e
 
@@ -144,6 +146,7 @@ readBack (NThe (VSigma x aT dT) p) =
      dv <- doCdr p
      d <- readBack (NThe dT' dv)
      return (CCons a d)
+readBack (NThe VTrivial _) = return CSole
 readBack (NThe VU t) = readBackType t
 readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
 
@@ -158,6 +161,7 @@ readBackType (VSigma x a d) =
   do y <- fresh x
      dV <- instantiate d x (VNeu a (NVar y))
      CSigma y <$> readBackType a <*> inBound y (readBackType dV)
+readBackType VTrivial = return CTrivial
 readBackType VU = return CU
 
 readBackNeutral :: Neutral -> Norm Core

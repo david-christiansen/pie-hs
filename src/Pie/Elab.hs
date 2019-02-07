@@ -171,6 +171,7 @@ isType' (Sigma ((x, a) :| as) d) =
                ((y, d) : ds) ->
                  isType' (Sigma ((y, d) :| ds) d)
      return (CSigma x a' d')
+isType' Trivial = return CTrivial
 isType' other = failure [MText (T.pack "Not a type"), MVal (E other)]
 
 
@@ -275,6 +276,8 @@ synth' (Cdr p) =
        other ->
          do ty <- readBackType other
             failure [MText (T.pack "Not a Σ: "), MVal (C ty)]
+synth' Trivial = return (SThe VU CTrivial)
+synth' Sole = return (SThe VTrivial CSole)
 synth' (The ty e) =
   do ty' <- isType ty
      tv <- eval ty'
