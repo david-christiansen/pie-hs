@@ -13,6 +13,7 @@ instance Functor Bwd where
   fmap f (xs :> x) = fmap f xs :> f x
 
 
+
 newtype Symbol = Symbol { symbolName :: Text }
   deriving (Eq, Ord, Show)
 
@@ -63,31 +64,45 @@ printLoc loc =
 data Located a = Located Loc a
   deriving Show
 
-newtype Expr = Expr (Located Expr')
+newtype Expr = Expr (Located (Expr' Expr))
   deriving Show
 
-data Expr' = Tick Symbol
-           | Atom
-           | Zero
-           | Add1 Expr
-           | Nat
-           | Var Symbol
-           | Pi (NonEmpty (Symbol, Expr)) Expr
-           | Lambda [Symbol] Expr
-           | App Expr Expr [Expr]
-           | U
-           | The Expr Expr
+newtype OutExpr = OutExpr (Expr' OutExpr)
+
+data Expr' e = Tick Symbol
+             | Atom
+             | Zero
+             | Add1 e
+             | IndNat e e e e
+             | Nat
+             | Var Symbol
+             | Arrow e (NonEmpty e)
+             | Pi (NonEmpty (Symbol, e)) e
+             | Lambda (NonEmpty Symbol) e
+             | App e e [e]
+             | Sigma (NonEmpty (Symbol, e)) e
+             | Pair e e
+             | Cons e e
+             | Car e
+             | Cdr e
+             | U
+             | The e e
   deriving Show
 
 data Core = CTick Symbol
           | CAtom
           | CZero
           | CAdd1 Core
+          | CIndNat Core Core Core Core
           | CNat
           | CVar Symbol
           | CPi Symbol Core Core
           | CLambda Symbol Core
           | CApp Core Core
+          | CSigma Symbol Core Core
+          | CCons Core Core
+          | CCar Core
+          | CCdr Core
           | CU
           | CThe Core Core
   deriving Show
@@ -99,12 +114,17 @@ data Value = VTick Symbol
            | VAdd1 Value
            | VPi Symbol Value (Closure Value)
            | VLambda Symbol (Closure Value)
+           | VSigma Symbol Value (Closure Value)
+           | VCons Value Value
            | VU
            | VNeu Value Neutral
   deriving Show
 
 data Neutral = NVar Symbol
+             | NIndNat Neutral Normal Normal Normal
              | NApp Neutral Normal
+             | NCar Neutral
+             | NCdr Neutral
   deriving Show
 
 data Normal = NThe { normType :: Value, normVal :: Value }

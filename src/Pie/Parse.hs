@@ -195,7 +195,7 @@ varName =
        then failure (Expected (T.pack "valid name"))
        else return x
 
-kw k = token (regex (T.pack k) k)
+kw k = token (string k)
 
 eatSpaces :: Parser ()
 eatSpaces = spanning isSpace *> pure ()
@@ -208,8 +208,8 @@ pair x y = (x, y)
 expr :: Parser Expr
 expr = Expr <$> located expr'
 
-expr' :: Parser Expr'
-expr' = u <|> nat <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compound
+expr' :: Parser (Expr' Expr)
+expr' = u <|> nat <|> tick <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compound
   where
     u = kw "U" *> pure U
     nat = kw "Nat" *> pure Nat
@@ -221,20 +221,29 @@ expr' = u <|> nat <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compoun
                 makeNat i
 
     compound =
-      parens (add1 <|> lambda <|> pi <|> the <|> app)
+      parens (add1 <|> indNat <|> lambda <|> pi <|> arrow <|> the <|> sigma <|> pairT <|> cons <|> car <|> cdr <|> app)
 
     add1 = kw "add1" *> (Add1 <$> expr)
 
     lambda = kw "lambda" *> (Lambda <$> argList <*> expr)
-      where argList = parens (rep varName)
+      where argList = parens (rep1 varName)
 
     pi = kw "Pi" *> (Pi <$> parens (rep1 (parens (pair <$> varName <*> expr))) <*> expr)
+
+    arrow = kw "->" *> (Arrow <$> expr <*> rep1 expr)
+
+    sigma = kw "Sigma" *> (Sigma <$> parens (rep1 (parens (pair <$> varName <*> expr))) <*> expr)
+    pairT = kw "Pair" *> (Pair <$> expr <*> expr)
+    cons = kw "cons" *> (Cons <$> expr <*> expr)
+    indNat = kw "ind-Nat" *> (IndNat <$> expr <*> expr <*> expr <*> expr)
+    car = kw "car" *> (Car <$> expr)
+    cdr = kw "cdr" *> (Cdr <$> expr)
 
     the = kw "the" *> (The <$> expr <*> expr)
 
     app = App <$> expr <*> expr <*> rep expr
 
-    makeNat :: Integer -> Parser Expr'
+    makeNat :: Integer -> Parser (Expr' Expr)
     makeNat i
       | i < 1 = return Zero
       | otherwise = Add1 . Expr <$> located (makeNat (i - 1))

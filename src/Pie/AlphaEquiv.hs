@@ -51,6 +51,11 @@ equiv e1 e2 =
       yes
     (CAdd1 j, CAdd1 k) ->
       equiv j k
+    (CIndNat tgt1 mot1 base1 step1, CIndNat tgt2 mot2 base2 step2) ->
+      equiv tgt1 tgt2 *>
+      equiv mot1 mot2 *>
+      equiv base1 base2 *>
+      equiv step1 step2
     (CNat, CNat) ->
       yes
     (CVar x, CVar y) ->
@@ -63,8 +68,17 @@ equiv e1 e2 =
     (CApp rator1 rand1, CApp rator2 rand2) ->
       equiv rator1 rator2 *>
       equiv rand1 rand2
+    (CSigma x a1 d1, CSigma y a2 d2) ->
+      equiv a1 a2 *>
+      withEquiv x y (equiv d1 d2)
+    (CCons a1 d1, CCons a2 d2) ->
+      equiv a1 a2 *> equiv d1 d2
+    (CCar p1, CCar p2) -> equiv p1 p2
+    (CCdr p1, CCdr p2) -> equiv p1 p2
     (CU, CU) ->
       yes
+    (CThe t1 e1, CThe t2 e2) ->
+      equiv t1 t2 *> equiv e1 e2
     _ ->
       no
 
