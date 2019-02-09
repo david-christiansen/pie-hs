@@ -2,6 +2,7 @@ module Pie.Parse where
 
 import Control.Applicative
 import Data.Char
+import Data.Foldable
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
@@ -209,7 +210,13 @@ expr :: Parser Expr
 expr = Expr <$> located expr'
 
 expr' :: Parser (Expr' Expr)
-expr' = u <|> nat <|> triv <|> sole <|> tick <|> atom <|> zero <|> natLit <|> (Var <$> varName) <|> compound
+expr' = asum [ u
+             , nat
+             , triv, sole
+             , tick, atom
+             , zero, natLit
+             , (Var <$> varName)
+             , compound]
   where
     u = kw "U" *> pure U
     nat = kw "Nat" *> pure Nat
@@ -223,7 +230,12 @@ expr' = u <|> nat <|> triv <|> sole <|> tick <|> atom <|> zero <|> natLit <|> (V
                 makeNat i
 
     compound =
-      parens (add1 <|> indNat <|> lambda <|> pi <|> arrow <|> the <|> sigma <|> pairT <|> cons <|> car <|> cdr <|> app)
+      parens (asum [ add1, indNat
+                   , lambda, pi, arrow
+                   , the
+                   , sigma, pairT , cons , car , cdr
+                   , eq, same, replace, trans, cong, symm, indEq
+                   , app])
 
     add1 = kw "add1" *> (Add1 <$> expr)
 
@@ -242,6 +254,20 @@ expr' = u <|> nat <|> triv <|> sole <|> tick <|> atom <|> zero <|> natLit <|> (V
     cdr = kw "cdr" *> (Cdr <$> expr)
 
     the = kw "the" *> (The <$> expr <*> expr)
+
+    eq = kw "=" *> (Eq <$> expr <*> expr <*> expr)
+
+    same = kw "same" *> (Same <$> expr)
+
+    replace = kw "replace" *> (Replace <$> expr <*> expr <*> expr)
+
+    trans = kw "trans" *> (Trans <$> expr <*> expr)
+
+    cong = kw "cong" *> (Cong <$> expr <*> expr)
+
+    symm = kw "symm" *> (Symm <$> expr)
+
+    indEq = kw "ind-=" *> (IndEq <$> expr <*> expr <*> expr)
 
     app = App <$> expr <*> expr <*> rep expr
 

@@ -90,6 +90,28 @@ eval (CCar p) = eval p >>= doCar
 eval (CCdr p) = eval p >>= doCdr
 eval CTrivial = return VTrivial
 eval CSole = return VSole
+eval (CEq ty from to) = VEq <$> eval ty <*> eval from <*> eval to
+eval (CSame e) = VSame <$> eval e
+eval (CReplace tgt mot base) =
+  do tgtv <- eval tgt
+     motv <- eval mot
+     basev <- eval base
+     doReplace tgtv motv basev
+eval (CTrans tgt1 tgt2) =
+  do v1 <- eval tgt1
+     v2 <- eval tgt2
+     doTrans v1 v2
+eval (CCong e1 e2 e3) =
+  do v1 <- eval e1
+     v2 <- eval e2
+     v3 <- eval e3
+     doCong v1 v2 v3
+eval (CSymm p) = eval p >>= doSymm
+eval (CIndEq tgt mot base) =
+  do tgtv <- eval tgt
+     motv <- eval mot
+     basev <- eval base
+     doIndEq tgtv motv basev
 eval CU = return VU
 eval (CThe _ e) = eval e
 
@@ -129,6 +151,61 @@ doIndNat tgt@(VNeu VNat ne) mot base step =
                         (CApp (CVar motName) (CAdd1 (CVar k)))))
      return (VNeu t (NIndNat ne (NThe motTy mot) (NThe baseTy base) (NThe stepTy step)))
 
+doReplace :: Value -> Value -> Value -> Norm Value
+doReplace (VSame v) mot base = return base
+doReplace (VNeu (VEq ty from to) ne) mot base =
+  do ty <- doApply mot to
+     x <- fresh (sym "x")
+     baseT <- doApply mot from
+     return (VNeu ty (NReplace ne
+                       (NThe (VPi x ty (Closure None CU)) mot)
+                       (NThe baseT base)))
+
+doTrans :: Value -> Value -> Norm Value
+doTrans (VSame v) (VSame _) = return (VSame v)
+doTrans (VSame from) (VNeu (VEq t _ to) ne) =
+  return (VNeu (VEq t from to) (NTrans2 (NThe (VEq t from from) (VSame from)) ne))
+doTrans (VNeu (VEq t from _) ne) (VSame to) =
+  return (VNeu (VEq t from to) (NTrans1 ne (NThe (VEq t to to) (VSame to))))
+doTrans (VNeu (VEq t from _) ne1) (VNeu (VEq _ _ to) ne2) =
+  return (VNeu (VEq t from to) (NTrans12 ne1 ne2))
+
+doCong (VSame v) _ fun =
+  VSame <$> doApply fun v
+doCong (VNeu (VEq t from to) ne) ret fun =
+  do from' <- doApply fun from
+     to' <- doApply fun to
+     x <- fresh (sym "x")
+     a <- fresh (sym "A")
+     b <- fresh (sym "B")
+     funTy <- withEnv (None :> (a, t) :> (b, ret)) $
+              eval (CPi x (CVar a) (CVar b))
+     return (VNeu (VEq ret from' to')
+              (NCong ne (NThe funTy fun)))
+
+doSymm :: Value -> Norm Value
+doSymm (VSame v) = return (VSame v)
+doSymm (VNeu (VEq t from to) ne) = return (VNeu (VEq t to from) (NSymm ne))
+
+
+doIndEq :: Value -> Value -> Value -> Norm Value
+doIndEq (VSame v) mot base = return base
+doIndEq tgt@(VNeu (VEq t from to) ne) mot base =
+  do motTo <- doApply mot to
+     ty <- doApply motTo tgt
+     motFrom <- doApply mot from
+     baseTy <- doApply motFrom (VSame from)
+     motTy <- indEqMotTy t from
+     return (VNeu ty (NIndEq ne (NThe motTy mot) (NThe baseTy base)))
+
+indEqMotTy ty from =
+  do p <- fresh (sym "p")
+     tN <- fresh (sym "t")
+     frN <- fresh (sym "from")
+     toN <- fresh (sym "to")
+     withEnv (None :> (tN, ty) :> (frN, from)) $
+       eval (CPi toN (CVar tN) (CPi p (CEq (CVar tN) (CVar frN) (CVar toN)) CU))
+
 readBack :: Normal -> Norm Core
 readBack (NThe VAtom (VTick x)) = return (CTick x)
 readBack (NThe VNat  VZero) = return CZero
@@ -147,6 +224,7 @@ readBack (NThe (VSigma x aT dT) p) =
      d <- readBack (NThe dT' dv)
      return (CCons a d)
 readBack (NThe VTrivial _) = return CSole
+readBack (NThe (VEq ty _ _) (VSame v)) = CSame <$> readBack (NThe ty v)
 readBack (NThe VU t) = readBackType t
 readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
 
@@ -162,6 +240,8 @@ readBackType (VSigma x a d) =
      dV <- instantiate d x (VNeu a (NVar y))
      CSigma y <$> readBackType a <*> inBound y (readBackType dV)
 readBackType VTrivial = return CTrivial
+readBackType (VEq t from to) =
+  CEq <$> readBackType t <*> readBack (NThe t from) <*> readBack (NThe t to)
 readBackType VU = return CU
 
 readBackNeutral :: Neutral -> Norm Core
@@ -171,3 +251,17 @@ readBackNeutral (NIndNat tgt mot base step) =
 readBackNeutral (NApp neu arg) = CApp <$> readBackNeutral neu <*> readBack arg
 readBackNeutral (NCar p) = CCar <$> readBackNeutral p
 readBackNeutral (NCdr p) = CCdr <$> readBackNeutral p
+readBackNeutral (NReplace tgt mot base) =
+  CReplace <$> readBackNeutral tgt <*> readBack mot <*> readBack base
+readBackNeutral (NTrans1 ne no) =
+  CTrans <$> readBackNeutral ne <*> readBack no
+readBackNeutral (NTrans2 no ne) =
+  CTrans <$> readBack no <*> readBackNeutral ne
+readBackNeutral (NTrans12 ne1 ne2) =
+  CTrans <$> readBackNeutral ne1 <*> readBackNeutral ne2
+readBackNeutral (NCong ne fun@(NThe (VPi _ a (Closure e c)) _)) =
+  do b <- withEnv e (eval c)
+     CCong <$> readBackNeutral ne <*> readBackType b <*> readBack fun
+readBackNeutral (NSymm ne) = CSymm <$> readBackNeutral ne
+readBackNeutral (NIndEq tgt mot base) =
+  CIndEq <$> readBackNeutral tgt <*> readBack mot <*> readBack base

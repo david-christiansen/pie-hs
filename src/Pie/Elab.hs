@@ -172,6 +172,10 @@ isType' (Sigma ((x, a) :| as) d) =
                  isType' (Sigma ((y, d) :| ds) d)
      return (CSigma x a' d')
 isType' Trivial = return CTrivial
+isType' (Eq t from to) =
+  do t' <- isType t
+     tV <- eval t'
+     CEq t' <$> check tV from <*> check tV to
 isType' other = failure [MText (T.pack "Not a type"), MVal (E other)]
 
 
@@ -334,12 +338,38 @@ check' t (Cons a d) =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not a pair type"), MVal (C t')]
+check' t (Same e) =
+  case t of
+    VEq ty from to ->
+      do e' <- check ty e
+         v <- eval e'
+         same ty from v
+         same ty v to
+         return (CSame e')
+         
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not an equality type"), MVal (C t')]      
 check' t other =
   do SThe t' other' <- synth' other
      sameType t t'
      return other'
 
--- TODO make caller evaluate args
+same ty v1 v2 =
+  do c1 <- readBack (NThe ty v1)
+     c2 <- readBack (NThe ty v2)
+     case alphaEquiv c1 c2 of
+       Left reason ->
+         do t <- readBackType ty
+         -- TODO include specific reason as well
+            failure [ MVal (C c1)
+                    , MText (T.pack "is not the same")
+                    , MVal (C t)
+                    , MText (T.pack "as")
+                    , MVal (C c2)
+                    ]
+       Right _ -> pure ()
+
 sameType v1 v2 =
   do c1 <- readBackType v1
      c2 <- readBackType v2

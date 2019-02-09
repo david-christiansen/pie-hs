@@ -87,6 +87,13 @@ data Expr' e = Tick Symbol
              | Cdr e
              | Trivial
              | Sole
+             | Eq e e e
+             | Same e
+             | Replace e e e
+             | Trans e e
+             | Cong e e
+             | Symm e
+             | IndEq e e e
              | U
              | The e e
   deriving Show
@@ -107,6 +114,13 @@ data Core = CTick Symbol
           | CCdr Core
           | CTrivial
           | CSole
+          | CEq Core Core Core
+          | CSame Core
+          | CReplace Core Core Core
+          | CTrans Core Core
+          | CCong Core Core Core
+          | CSymm Core
+          | CIndEq Core Core Core
           | CU
           | CThe Core Core
   deriving Show
@@ -122,6 +136,8 @@ data Value = VTick Symbol
            | VCons Value Value
            | VTrivial
            | VSole
+           | VEq Value Value Value
+           | VSame Value
            | VU
            | VNeu Value Neutral
   deriving Show
@@ -131,6 +147,13 @@ data Neutral = NVar Symbol
              | NApp Neutral Normal
              | NCar Neutral
              | NCdr Neutral
+             | NReplace Neutral Normal Normal
+             | NTrans1 Neutral Normal
+             | NTrans2 Normal Neutral
+             | NTrans12 Neutral Neutral
+             | NCong Neutral Normal
+             | NSymm Neutral
+             | NIndEq Neutral Normal Normal
   deriving Show
 
 data Normal = NThe { normType :: Value, normVal :: Value }

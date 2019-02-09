@@ -79,6 +79,20 @@ equiv e1 e2 =
     (CSole, CSole) -> yes
     (CU, CU) ->
       yes
+    (CEq a f1 t1, CEq b f2 t2) ->
+      equiv a b *> equiv f1 f2 *> equiv t1 t2
+    (CSame e1, CSame e2) ->
+      equiv e1 e2
+    (CReplace tgt1 mot1 base1, CReplace tgt2 mot2 base2) ->
+      equiv tgt1 tgt2 *> equiv mot1 mot2 *> equiv base1 base2
+    (CTrans a1 b1, CTrans a2 b2) ->
+      equiv a1 a2 *> equiv b1 b2
+    (CCong a1 b1 c1, CCong a2 b2 c2) ->
+      equiv a1 a2 *> equiv b1 b2 *> equiv c1 c2
+    (CSymm p1, CSymm p2) ->
+      equiv p1 p2
+    (CIndEq tgt1 mot1 base1, CIndEq tgt2 mot2 base2) ->
+      equiv tgt1 tgt2 *> equiv mot1 mot2 *> equiv base1 base2
     (CThe t1 e1, CThe t2 e2) ->
       equiv t1 t2 *> equiv e1 e2
     _ ->
