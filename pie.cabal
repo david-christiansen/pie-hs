@@ -39,9 +39,12 @@ library
 test-suite pie-tests
     import:              all
     
-    type:       exitcode-stdio-1.0
-    main-is:    test-foo.hs
+    type:                exitcode-stdio-1.0
+    main-is:             Test.hs
+    hs-source-dirs:      test
     build-depends:       pie
+                       , tasty ^>= 1.2
+                       , tasty-hunit ^>= 0.10
     default-language:    Haskell2010
 
 executable pie
