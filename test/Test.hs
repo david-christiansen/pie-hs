@@ -26,6 +26,12 @@ normTests =
         , ( "(the (Pi ((x (Pair Trivial Trivial))) (Pair Trivial Trivial)) (lambda (x) x))"
           , "(the (Pi ((y (Pair Trivial Trivial))) (Pair Trivial Trivial)) (lambda (z) (cons sole sole)))"
           )
+        , ( "(the (-> (-> Trivial Trivial) (-> Trivial Trivial)) (lambda (x) x))"
+          , "(the (-> (-> Trivial Trivial) (-> Trivial Trivial)) (lambda (f) (lambda (x) sole)))"
+          )
+        , ( "(the (-> (-> Nat Nat) (-> Nat Nat)) (lambda (x) x))"
+          , "(the (-> (-> Nat Nat) (-> Nat Nat)) (lambda (f) (lambda (x) (f x))))"
+          )
         ]
     ]
 
@@ -66,8 +72,3 @@ hasNorm input normal =
                    do v <- N.eval inputCore
                       N.readBack (NThe ty1 v)
      mustBeAlphaEquiv normCore newNorm
-
-                             
-                             
-          
-      
