@@ -22,6 +22,10 @@ normTests =
         -- Base types
         [ ("(the Trivial sole)", "sole")
         , ("4", "(add1 (add1 (add1 (add1 zero))))")
+        -- Irrelevance for Trivial
+        , ( "(the (Pi ((x Trivial) (y Trivial)) (= Trivial x y)) (lambda (x y) (same x)))"
+          , "(the (Pi ((x Trivial) (y Trivial)) (= Trivial x y)) (lambda (x y) (same sole)))"
+          )
         -- η rules
         , ( "(the (Pi ((x (Pair Trivial Trivial))) (Pair Trivial Trivial)) (lambda (x) x))"
           , "(the (Pi ((y (Pair Trivial Trivial))) (Pair Trivial Trivial)) (lambda (z) (cons sole sole)))"

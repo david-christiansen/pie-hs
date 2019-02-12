@@ -64,7 +64,7 @@ applyRenaming :: Symbol -> Elab Symbol
 applyRenaming x =
   Elab (\ _ _ ren ->
           case lookup x ren of
-            Nothing -> panic ("Can't rename " ++ show x)
+            Nothing -> panic ("Can't rename " ++ show x ++ " in " ++ show ren)
             Just y -> pure y)
 
 rename :: Symbol -> Symbol -> Elab a -> Elab a
@@ -148,13 +148,15 @@ isType' (Arrow dom (t:|ts)) =
 isType' (Pi ((x, dom) :| doms) ran) =
   do dom' <- isType dom
      domVal <- eval dom'
-     ran' <- withCtxExtension x domVal $
+     x' <- fresh x
+     ran' <- withCtxExtension x' domVal $
+             rename x x' $
              case doms of
                [] ->
                  isType ran
                ((y, d) : ds) ->
                  isType' (Pi ((y, d) :| ds) ran)
-     return (CPi x dom' ran')
+     return (CPi x' dom' ran')
 isType' (Pair a d) =
   do x <- fresh (Symbol (T.pack "x"))
      a' <- isType a
@@ -164,13 +166,15 @@ isType' (Pair a d) =
 isType' (Sigma ((x, a) :| as) d) =
   do a' <- isType a
      aVal <- eval a'
+     x' <- fresh x
      d' <- withCtxExtension x aVal $
+           rename x x' $
              case as of
                [] ->
                  isType d
                ((y, d) : ds) ->
                  isType' (Sigma ((y, d) :| ds) d)
-     return (CSigma x a' d')
+     return (CSigma x' a' d')
 isType' Trivial = return CTrivial
 isType' (Eq t from to) =
   do t' <- isType t
