@@ -180,7 +180,8 @@ isType' (Eq t from to) =
   do t' <- isType t
      tV <- eval t'
      CEq t' <$> check tV from <*> check tV to
-isType' other = failure [MText (T.pack "Not a type"), MVal (E other)]
+isType' (Vec t len) = CVec <$> isType t <*> check VNat len
+isType' other = check' VU other
 
 
 data SynthResult = SThe { theType :: Value, theExpr :: Core }
@@ -306,6 +307,36 @@ synth' (App rator rand1 rands) =
     checkArgs _ other _ =
       do t <- readBackType other
          failure [MText (T.pack "Not a Π type: "), MVal (C t)]
+synth' (VecHead es) =
+  do SThe esT es' <- synth es
+     case esT of
+       VVec elemT len ->
+         case len of
+           VAdd1 k ->
+             return (SThe elemT (CVecHead es'))
+           other ->
+             do len' <- readBack (NThe VNat len)
+                failure [ MText (T.pack "Expected a Vec with non-zero length, got a Vec with")
+                        , MVal (C len')
+                        , MText (T.pack "length.")]
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
+synth' (VecTail es) =
+  do SThe esT es' <- synth es
+     case esT of
+       VVec elemT len ->
+         case len of
+           VAdd1 k ->
+             return (SThe (VVec elemT k) (CVecTail es'))
+           other ->
+             do len' <- readBack (NThe VNat len)
+                failure [ MText (T.pack "Expected a Vec with non-zero length, got a Vec with")
+                        , MVal (C len')
+                        , MText (T.pack "length.")]
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
 synth' other = failure [ MText (T.pack "Can't synth")
                        , MVal (E other)
                        ]
@@ -350,10 +381,41 @@ check' t (Same e) =
          same ty from v
          same ty v to
          return (CSame e')
-         
+
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not an equality type"), MVal (C t')]      
+         failure [MText (T.pack "Not an equality type"), MVal (C t')]
+check' t (VecCons e es) =
+  case t of
+    VVec elem len ->
+      case len of
+        VAdd1 k ->
+          CVecCons <$> check elem e <*> check (VVec elem k) es
+        otherLen ->
+          do len' <- readBack (NThe VNat otherLen)
+             failure [ MText (T.pack "Expected a non-zero length, got a Vec type with")
+                     , MVal (C len')
+                     , MText (T.pack "length.")]
+
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not a Vec type"), MVal (C t')]
+check' t VecNil =
+  case t of
+    VVec elem len ->
+      case len of
+        VZero ->
+          return CVecNil
+        otherLen ->
+          do len' <- readBack (NThe VNat otherLen)
+             failure [ MText (T.pack "Expected zero length in Vec, got a")
+                     , MVal (C len')
+                     , MText (T.pack "length.")]
+
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not a Vec type"), MVal (C t')]
+
 check' t other =
   do SThe t' other' <- synth' other
      sameType t t'

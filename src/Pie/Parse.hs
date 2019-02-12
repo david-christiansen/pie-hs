@@ -215,8 +215,9 @@ expr' = asum [ u
              , triv, sole
              , tick, atom
              , zero, natLit
+             , vecNil
              , (Var <$> varName)
-             , compound]
+             ] <|> compound
   where
     u = kw "U" *> pure U
     nat = kw "Nat" *> pure Nat
@@ -228,14 +229,15 @@ expr' = asum [ u
     natLit = do i <- read . T.unpack <$>
                        token (regex (T.pack "natural number literal") "[0-9]+")
                 makeNat i
-
+    vecNil = kw "vecnil" *> pure VecNil
     compound =
       parens (asum [ add1, indNat
                    , lambda, pi, arrow
                    , the
                    , sigma, pairT , cons , car , cdr
                    , eq, same, replace, trans, cong, symm, indEq
-                   , app])
+                   , vec, vecCons, vecHead, vecTail, indVec
+                   ] <|> app)
 
     add1 = kw "add1" *> (Add1 <$> expr)
 
@@ -268,6 +270,16 @@ expr' = asum [ u
     symm = kw "symm" *> (Symm <$> expr)
 
     indEq = kw "ind-=" *> (IndEq <$> expr <*> expr <*> expr)
+
+    vec = kw "Vec" *> (Vec <$> expr <*> expr)
+
+    vecCons = kw "vec::" *> (VecCons <$> expr <*> expr)
+
+    vecHead = kw "head" *> (VecHead <$> expr)
+    
+    vecTail = kw "tail" *> (VecTail <$> expr)
+
+    indVec = kw "ind-Vec" *> (IndVec <$> expr <*> expr <*> expr <*> expr <*> expr)
 
     app = App <$> expr <*> expr <*> rep expr
 

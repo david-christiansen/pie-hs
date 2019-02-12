@@ -34,6 +34,13 @@ resugar (CTrans p1 p2) = OutExpr (Trans (resugar p1) (resugar p2))
 resugar (CCong p _ fun) = OutExpr (Cong (resugar p) (resugar fun))
 resugar (CSymm e) = OutExpr (Symm (resugar e))
 resugar (CIndEq tgt mot base) = OutExpr (IndEq (resugar tgt) (resugar mot) (resugar base))
+resugar (CVec elem len) = OutExpr (Vec (resugar elem) (resugar len))
+resugar (CVecCons e es) = OutExpr (VecCons (resugar e) (resugar es))
+resugar CVecNil = OutExpr VecNil
+resugar (CVecHead es) = OutExpr (VecHead (resugar es))
+resugar (CVecTail es) = OutExpr (VecTail (resugar es))
+resugar (CIndVec len es mot base step) =
+  OutExpr (IndVec (resugar len) (resugar es) (resugar mot) (resugar base) (resugar step))
 resugar CU = OutExpr U
 resugar (CThe t e) = OutExpr (The (resugar t) (resugar e))
 
@@ -79,6 +86,12 @@ pp' (Trans p1 p2) = list "trans" [p1, p2]
 pp' (Cong p fun) = list "cong" [p, fun]
 pp' (Symm e) = list "symm" [e]
 pp' (IndEq tgt mot base) = list "ind-=" [tgt, mot, base]
+pp' (Vec elem len) = list "Vec" [elem, len]
+pp' VecNil = T.pack "vecnil"
+pp' (VecCons e es) = list "vec::" [e, es]
+pp' (VecHead es) = list "head" [es]
+pp' (VecTail es) = list "tail" [es]
+pp' (IndVec len tgt mot base step) = list "ind-Vec" [len, tgt, mot, base, step]
 pp' U = T.pack "U"
 pp' (The t e) = T.pack "(the " <> pp t <> T.pack " " <> pp e <> T.pack ")"
 

@@ -32,7 +32,7 @@ pieKeywords =
     "List", "::", "nil", "rec-List", "ind-List",
     "Absurd", "ind-Absurd",
     "=", "same", "replace", "trans", "cong", "symm", "ind-=",
-    "Vec ","vecnil ","vec::", "head", "tail", "ind-Vec",
+    "Vec", "vecnil ","vec::", "head", "tail", "ind-Vec",
     "Either", "left", "right", "ind-Either",
     "TODO", "the"]
 
@@ -94,6 +94,12 @@ data Expr' e = Tick Symbol
              | Cong e e
              | Symm e
              | IndEq e e e
+             | Vec e e
+             | VecNil
+             | VecCons e e
+             | VecHead e
+             | VecTail e
+             | IndVec e e e e e
              | U
              | The e e
   deriving Show
@@ -121,6 +127,12 @@ data Core = CTick Symbol
           | CCong Core Core Core
           | CSymm Core
           | CIndEq Core Core Core
+          | CVec Core Core
+          | CVecNil
+          | CVecCons Core Core
+          | CVecHead Core
+          | CVecTail Core
+          | CIndVec Core Core Core Core Core
           | CU
           | CThe Core Core
   deriving Show
@@ -138,6 +150,9 @@ data Value = VTick Symbol
            | VSole
            | VEq Value Value Value
            | VSame Value
+           | VVec Value Value
+           | VVecCons Value Value
+           | VVecNil
            | VU
            | VNeu Value Neutral
   deriving Show
@@ -154,6 +169,11 @@ data Neutral = NVar Symbol
              | NCong Neutral Normal
              | NSymm Neutral
              | NIndEq Neutral Normal Normal
+             | NHead Neutral
+             | NTail Neutral
+             | NIndVec1 Neutral Normal Normal Normal Normal
+             | NIndVec2 Normal Neutral Normal Normal Normal
+             | NIndVec12 Neutral Neutral Normal Normal Normal
   deriving Show
 
 data Normal = NThe { normType :: Value, normVal :: Value }

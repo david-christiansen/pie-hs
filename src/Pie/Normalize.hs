@@ -112,6 +112,18 @@ eval (CIndEq tgt mot base) =
      motv <- eval mot
      basev <- eval base
      doIndEq tgtv motv basev
+eval (CVec elem len) = VVec <$> eval elem <*> eval len
+eval CVecNil = return VVecNil
+eval (CVecCons e es) = VVecCons <$> eval e <*> eval es
+eval (CVecHead es) = eval es >>= doHead
+eval (CVecTail es) = eval es >>= doTail
+eval (CIndVec k es mot base step) =
+  do kv <- eval k
+     esv <- eval es
+     motv <- eval mot
+     basev <- eval base
+     stepv <- eval step
+     doIndVec kv esv motv basev stepv
 eval CU = return VU
 eval (CThe _ e) = eval e
 
@@ -206,6 +218,22 @@ indEqMotTy ty from =
      withEnv (None :> (tN, ty) :> (frN, from)) $
        eval (CPi toN (CVar tN) (CPi p (CEq (CVar tN) (CVar frN) (CVar toN)) CU))
 
+doHead (VVecCons e _) = return e
+doHead (VNeu (VVec elem _) ne) = return (VNeu elem (NHead ne))
+
+doTail (VVecCons e _) = return e
+doTail (VNeu (VVec elem (VAdd1 k)) ne) = return (VNeu (VVec elem k) (NTail ne))
+
+doIndVec VZero VVecNil mot base step = return base
+doIndVec (VAdd1 k) (VVecCons v vs) mot base step =
+  do soFar <- doIndVec k vs mot base step
+     step1 <- doApply step k
+     step2 <- doApply step1 v
+     step3 <- doApply step2 vs
+     doApply step3 soFar
+-- TODO neutral cases
+
+
 readBack :: Normal -> Norm Core
 readBack (NThe VAtom (VTick x)) = return (CTick x)
 readBack (NThe VNat  VZero) = return CZero
@@ -225,6 +253,9 @@ readBack (NThe (VSigma x aT dT) p) =
      return (CCons a d)
 readBack (NThe VTrivial _) = return CSole
 readBack (NThe (VEq ty _ _) (VSame v)) = CSame <$> readBack (NThe ty v)
+readBack (NThe (VVec _ _) VVecNil) = return CVecNil
+readBack (NThe (VVec elem (VAdd1 len)) (VVecCons v vs)) =
+  CVecCons <$> readBack (NThe elem v) <*> readBack (NThe (VVec elem len) vs)
 readBack (NThe VU t) = readBackType t
 readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
 
@@ -242,6 +273,8 @@ readBackType (VSigma x a d) =
 readBackType VTrivial = return CTrivial
 readBackType (VEq t from to) =
   CEq <$> readBackType t <*> readBack (NThe t from) <*> readBack (NThe t to)
+readBackType (VVec elem len) =
+  CVec <$> readBackType elem <*> readBack (NThe VNat len)
 readBackType VU = return CU
 
 readBackNeutral :: Neutral -> Norm Core
@@ -265,3 +298,5 @@ readBackNeutral (NCong ne fun@(NThe (VPi _ a (Closure e c)) _)) =
 readBackNeutral (NSymm ne) = CSymm <$> readBackNeutral ne
 readBackNeutral (NIndEq tgt mot base) =
   CIndEq <$> readBackNeutral tgt <*> readBack mot <*> readBack base
+readBackNeutral (NHead ne) = CVecHead <$> readBackNeutral ne
+readBackNeutral (NTail ne) = CVecTail <$> readBackNeutral ne
