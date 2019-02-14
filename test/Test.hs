@@ -65,6 +65,13 @@ parsingSourceLocs = testGroup "Source locations from parser"
           App (Expr (Loc "<test input>" (Pos 1 2) (Pos 1 3)) $ Var (sym "f"))
               (Expr (Loc "<test input>" (Pos 1 4) (Pos 1 5)) (Var (sym "x")) :| [])
           )
+      , ( "(lambda (x y) (add1 x))"
+        , Expr (Loc "<test input>" (Pos 1 1) (Pos 1 24)) $
+          Lambda ((Loc "<test input>" (Pos 1 10) (Pos 1 11), sym "x") :|
+                  [(Loc "<test input>" (Pos 1 12) (Pos 1 13), sym "y")]) $
+          Expr (Loc "<test input>" (Pos 1 15) (Pos 1 23))
+               (Add1 (Expr (Loc "<test input>" (Pos 1 21) (Pos 1 22)) $ Var (sym "x")))
+          )
       ]
 
 
