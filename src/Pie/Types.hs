@@ -37,10 +37,10 @@ pieKeywords =
     "TODO", "the"]
 
 data Pos = Pos { posLine :: Int, posCol :: Int }
-  deriving Show
+  deriving (Eq, Show)
 
 data Positioned a = Positioned Pos a
-  deriving Show
+  deriving (Eq, Show)
 
 printPos :: Pos -> Text
 printPos pos =
@@ -52,57 +52,71 @@ data Loc = Loc { locSource :: FilePath
                , locStart :: Pos
                , locEnd :: Pos
                }
-  deriving Show
+  deriving (Eq, Show)
 
 printLoc :: Loc -> Text
-printLoc loc =
-  T.pack (locSource loc ++ ":") <>
-  printPos (locStart loc) <>
+printLoc (Loc source start end) =
+  T.pack (source ++ ":") <>
+  printPos start <>
   T.pack "-" <>
-  printPos (locEnd loc)
+  printPos end
+
+
+-- | Invariants: non-overlapping regions where the first argument ends
+-- before the second starts in same file
+spanLocs :: Loc -> Loc -> Loc
+spanLocs (Loc src p1 _) (Loc _ _ p2) = Loc src p1 p2
 
 data Located a = Located Loc a
-  deriving Show
+  deriving (Eq, Show)
 
-newtype Expr = Expr (Located (Expr' Expr))
-  deriving Show
+instance Functor Located where
+  fmap f (Located loc x) = Located loc (f x)
 
-newtype OutExpr = OutExpr (Expr' OutExpr)
+unLocate :: Located a -> a
+unLocate (Located _ x) = x
 
-data Expr' e = Tick Symbol
-             | Atom
-             | Zero
-             | Add1 e
-             | IndNat e e e e
-             | Nat
-             | Var Symbol
-             | Arrow e (NonEmpty e)
-             | Pi (NonEmpty (Symbol, e)) e
-             | Lambda (NonEmpty Symbol) e
-             | App e e [e]
-             | Sigma (NonEmpty (Symbol, e)) e
-             | Pair e e
-             | Cons e e
-             | Car e
-             | Cdr e
-             | Trivial
-             | Sole
-             | Eq e e e
-             | Same e
-             | Replace e e e
-             | Trans e e
-             | Cong e e
-             | Symm e
-             | IndEq e e e
-             | Vec e e
-             | VecNil
-             | VecCons e e
-             | VecHead e
-             | VecTail e
-             | IndVec e e e e e
-             | U
-             | The e e
-  deriving Show
+data LocatedExpr loc = Expr loc (Expr' loc)
+  deriving (Eq, Show)
+
+type Expr = LocatedExpr Loc
+type OutExpr = LocatedExpr ()
+
+
+data Expr' loc = Tick Symbol
+               | Atom
+               | Zero
+               | Add1 (LocatedExpr loc)
+               | IndNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Nat
+               | Var Symbol
+               | Arrow (LocatedExpr loc) (NonEmpty (LocatedExpr loc))
+               | Pi (NonEmpty (loc, Symbol, (LocatedExpr loc))) (LocatedExpr loc)
+               | Lambda (NonEmpty (loc, Symbol)) (LocatedExpr loc)
+               | App (LocatedExpr loc) (NonEmpty (LocatedExpr loc))
+               | Sigma (NonEmpty (loc, Symbol, (LocatedExpr loc))) (LocatedExpr loc)
+               | Pair (LocatedExpr loc) (LocatedExpr loc)
+               | Cons (LocatedExpr loc) (LocatedExpr loc)
+               | Car (LocatedExpr loc)
+               | Cdr (LocatedExpr loc)
+               | Trivial
+               | Sole
+               | Eq (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Same (LocatedExpr loc)
+               | Replace (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Trans (LocatedExpr loc) (LocatedExpr loc)
+               | Cong (LocatedExpr loc) (LocatedExpr loc)
+               | Symm (LocatedExpr loc)
+               | IndEq (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Vec (LocatedExpr loc) (LocatedExpr loc)
+               | VecNil
+               | VecCons (LocatedExpr loc) (LocatedExpr loc)
+               | VecHead (LocatedExpr loc)
+               | VecTail (LocatedExpr loc)
+               | IndVec (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | U
+               | The (LocatedExpr loc) (LocatedExpr loc)
+  deriving (Eq, Show)
 
 data Core = CTick Symbol
           | CAtom

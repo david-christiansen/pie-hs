@@ -1,5 +1,6 @@
 module Main where
 
+import Data.List.NonEmpty(NonEmpty(..))
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -12,7 +13,7 @@ import qualified Pie.Parse as P
 
 main = defaultMain tests
 
-tests = testGroup "Pie tests" [normTests]
+tests = testGroup "Pie tests" [normTests, parsingSourceLocs]
 
 
 normTests =
@@ -38,6 +39,34 @@ normTests =
           )
         ]
     ]
+
+parsingSourceLocs = testGroup "Source locations from parser"
+  [ testCase (show str) (parseTest str test)
+  | (str, test) <- theTests
+  ]
+  where
+    parseTest str expected =
+      do res <- mustSucceed (P.testParser P.expr str)
+         if res == expected
+           then return ()
+           else assertFailure str
+
+    theTests =
+      [ ( "x"
+        , Expr (Loc "<test input>" (Pos 1 1) (Pos 1 2)) $
+          Var (sym "x")
+        )
+      ,( "zero"
+        , Expr (Loc "<test input>" (Pos 1 1) (Pos 1 5)) $
+          Zero
+        )
+      , ( "(f x)"
+        , Expr (Loc "<test input>" (Pos 1 1) (Pos 1 6)) $
+          App (Expr (Loc "<test input>" (Pos 1 2) (Pos 1 3)) $ Var (sym "f"))
+              (Expr (Loc "<test input>" (Pos 1 4) (Pos 1 5)) (Var (sym "x")) :| [])
+          )
+      ]
+
 
 mustSucceed ::
   Show e =>

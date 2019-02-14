@@ -18,7 +18,7 @@ names :: Ctx a -> [Symbol]
 names None = []
 names (ctx :> (x, _)) = x : names ctx
 
-data E = C Core | E (Expr' Expr)
+data E = C Core | E Expr
   deriving Show
 
 newtype ElabErr = ElabErr (Located [MessagePart E])
@@ -59,6 +59,9 @@ failure msg = Elab (\ ctx loc _ -> Left (ElabErr (Located loc msg)))
 
 getCtx :: Elab (Ctx Value)
 getCtx = Elab (\ ctx _ _ -> pure ctx)
+
+currentLoc :: Elab Loc
+currentLoc = Elab (\_ loc _ -> pure loc)
 
 applyRenaming :: Symbol -> Elab Symbol
 applyRenaming x =
@@ -122,15 +125,15 @@ readBack = runNorm . Norm.readBack
 
 
 
-inExpr :: Expr -> ((Expr' Expr) -> Elab a) -> Elab a
-inExpr (Expr (Located loc e)) act =
+inExpr :: Expr -> ((Expr' Loc) -> Elab a) -> Elab a
+inExpr (Expr loc e) act =
   Elab (\ ctx _ ren ->
           runElab (act e) ctx loc ren)
 
 isType :: Expr -> Elab Core
 isType e = inExpr e isType'
 
-isType' :: (Expr' Expr) -> Elab Core
+isType' :: (Expr' Loc) -> Elab Core
 isType' U = pure CU
 isType' Nat = pure CNat
 isType' Atom = pure CAtom
@@ -145,7 +148,7 @@ isType' (Arrow dom (t:|ts)) =
                (ty : tys) ->
                  isType' (Arrow t (ty :| tys))
      return (CPi x dom' ran')
-isType' (Pi ((x, dom) :| doms) ran) =
+isType' (Pi ((loc, x, dom) :| doms) ran) =
   do dom' <- isType dom
      domVal <- eval dom'
      x' <- fresh x
@@ -154,8 +157,8 @@ isType' (Pi ((x, dom) :| doms) ran) =
              case doms of
                [] ->
                  isType ran
-               ((y, d) : ds) ->
-                 isType' (Pi ((y, d) :| ds) ran)
+               (nextArg : ds) ->
+                 isType' (Pi (nextArg :| ds) ran)
      return (CPi x' dom' ran')
 isType' (Pair a d) =
   do x <- fresh (Symbol (T.pack "x"))
@@ -163,7 +166,7 @@ isType' (Pair a d) =
      aVal <- eval a'
      d' <- withCtxExtension x aVal $ isType d
      return (CSigma x a' d')
-isType' (Sigma ((x, a) :| as) d) =
+isType' (Sigma ((loc, x, a) :| as) d) =
   do a' <- isType a
      aVal <- eval a'
      x' <- fresh x
@@ -172,8 +175,8 @@ isType' (Sigma ((x, a) :| as) d) =
              case as of
                [] ->
                  isType d
-               ((y, d) : ds) ->
-                 isType' (Sigma ((y, d) :| ds) d)
+               (nextA : ds) ->
+                 isType' (Sigma (nextA :| ds) d)
      return (CSigma x' a' d')
 isType' Trivial = return CTrivial
 isType' (Eq t from to) =
@@ -226,7 +229,9 @@ synth' (Var x) =
      x' <- applyRenaming x
      findVar x' ctx
   where
-    findVar x' None = failure [MText (T.pack "Unknown variable"), MVal (E (Var x))]
+    findVar x' None =
+      do loc <- currentLoc
+         failure [MText (T.pack "Unknown variable"), MVal (E (Expr loc (Var x)))]
     findVar x' (ctx' :> (y, HasType t))
       | x' == y = pure (SThe t (CVar x'))
       | otherwise = findVar x' ctx'
@@ -241,25 +246,25 @@ synth' (Arrow dom (t:|ts)) =
                (ty : tys) ->
                  check' VU (Arrow t (ty :| tys))
      return (SThe VU (CPi x dom' ran'))
-synth' (Pi ((x, dom) :| doms) ran) =
+synth' (Pi ((loc, x, dom) :| doms) ran) =
   do dom' <- check VU dom
      domVal <- eval dom'
      ran' <- withCtxExtension x domVal $
              case doms of
                [] ->
                  check VU ran
-               ((y, d) : ds) ->
-                 check' VU (Pi ((y, d) :| ds) ran)
+               (y : ds) ->
+                 check' VU (Pi (y :| ds) ran)
      return (SThe VU (CPi x dom' ran'))
-synth' (Sigma ((x, a) :| as) d) =
+synth' (Sigma ((loc, x, a) :| as) d) =
   do a' <- check VU a
      aVal <- eval a'
      d' <- withCtxExtension x aVal $
              case as of
                [] ->
                  check VU d
-               ((y, d) : ds) ->
-                 check' VU (Pi ((y, d) :| ds) d)
+               ((loc, y, d) : ds) ->
+                 check' VU (Pi ((loc, y, d) :| ds) d)
      return (SThe VU (CSigma x a' d'))
 synth' (Pair a d) =
   do a' <- check VU a
@@ -292,7 +297,7 @@ synth' (The ty e) =
      tv <- eval ty'
      e' <- check tv e
      return (SThe tv e')
-synth' (App rator rand1 rands) =
+synth' (App rator (rand1 :| rands)) =
   do (SThe ratorT rator') <- synth rator
      checkArgs rator' ratorT (rand1 :| rands)
 
@@ -337,14 +342,16 @@ synth' (VecTail es) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
-synth' other = failure [ MText (T.pack "Can't synth")
-                       , MVal (E other)
-                       ]
+synth' other =
+  do loc <- currentLoc
+     failure [ MText (T.pack "Can't synth")
+             , MVal (E (Expr loc other))
+             ]
 
 check :: Value -> Expr -> Elab Core
 check t e = inExpr e (check' t)
 
-check' t (Lambda (x :| xs) body) =
+check' t (Lambda ((loc, x) :| xs) body) =
   case t of
     VPi y dom ran ->
       do z <- fresh y
@@ -355,7 +362,7 @@ check' t (Lambda (x :| xs) body) =
                   do body' <- rename x z $
                               check bodyT body
                      return (CLambda z body')
-                (y:ys) ->
+                (y : ys) ->
                   do body' <- rename x z $
                               check' bodyT (Lambda (y :| ys) body)
                      return (CLambda z body')

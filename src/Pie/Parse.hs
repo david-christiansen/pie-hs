@@ -155,7 +155,7 @@ spanning p =
        [] -> modify (\st -> st { currentInput = rest })
        ls -> modify (\st -> st { currentInput = rest
                                , currentPos = let Pos l c = currentPos st
-                                              in Pos (l + length ls) (c + T.length (last ls))
+                                              in Pos (l + length ls - 1) (c + T.length (last ls))
                                })
      return matching
 
@@ -186,8 +186,8 @@ hashLang = regex (T.pack "language identification") "#lang pie" *> eatSpaces
 ident :: Parser Text
 ident = regex (T.pack "identifier") "[\\p{Letter}-][\\p{Letter}0-9₀₁₂₃₄₅₆₇₈₉-]*"
 
-token :: Parser a -> Parser a
-token p = p <* eatSpaces
+token :: Parser a -> Parser (Located a)
+token p = located p <* eatSpaces
 
 varName =
   token $
@@ -204,51 +204,67 @@ eatSpaces = spanning isSpace *> pure ()
 parens :: Parser a -> Parser a
 parens p = token (litChar '(') *> p <* token (litChar ')')
 
+parensLoc :: Parser a -> Parser (Located a)
+parensLoc p = do Located open _ <- token (litChar '(')
+                 res <- p
+                 Located close _ <- token (litChar ')')
+                 return (Located (spanLocs open close) res)
+
 pair x y = (x, y)
 
-expr :: Parser Expr
-expr = Expr <$> located expr'
+atLoc :: Parser (Located a) -> b -> Parser (Located b)
+atLoc p x = fmap (fmap (const x)) p
 
-expr' :: Parser (Expr' Expr)
+expr :: Parser Expr
+expr = do Located loc e <- expr'
+          return (Expr loc e)
+
+expr' :: Parser (Located (Expr' Loc))
 expr' = asum [ u
              , nat
              , triv, sole
              , tick, atom
              , zero, natLit
              , vecNil
-             , (Var <$> varName)
+             , fmap Var <$> varName
              ] <|> compound
   where
-    u = kw "U" *> pure U
-    nat = kw "Nat" *> pure Nat
-    atom = kw "Atom" *> pure Atom
-    zero = kw "zero" *> pure Zero
-    triv = kw "Trivial" *> pure Trivial
-    sole = kw "sole" *> pure Sole
-    tick = Tick . Symbol <$> (litChar '\'' *> ident) -- TODO separate atom name from var name - atom name has fewer possibilities!
-    natLit = do i <- read . T.unpack <$>
-                       token (regex (T.pack "natural number literal") "[0-9]+")
-                makeNat i
-    vecNil = kw "vecnil" *> pure VecNil
+    atomic k v = atLoc (kw k) v
+    u = atomic "U" U
+    nat = atomic "Nat" Nat
+    atom = atomic "Atom" Atom
+    zero = atomic "zero" Zero
+    triv = atomic "Trivial" Trivial
+    sole = atomic "sole" Sole
+    tick = do Located loc x <- token (litChar '\'' *> ident)  -- TODO separate atom name from var name - atom name has fewer possibilities!
+              return (Located loc (Tick (Symbol x)))
+    natLit = do Located loc i <- token (regex (T.pack "natural number literal") "[0-9]+")
+                return (Located loc (makeNat loc (read (T.unpack i))))
+    vecNil = atomic "vecnil" VecNil
     compound =
-      parens (asum [ add1, indNat
-                   , lambda, pi, arrow
-                   , the
-                   , sigma, pairT , cons , car , cdr
-                   , eq, same, replace, trans, cong, symm, indEq
-                   , vec, vecCons, vecHead, vecTail, indVec
-                   ] <|> app)
+      parensLoc (asum [ add1, indNat
+                      , lambda, pi, arrow
+                      , the
+                      , sigma, pairT , cons , car , cdr
+                      , eq, same, replace, trans, cong, symm, indEq
+                      , vec, vecCons, vecHead, vecTail, indVec
+                      ] <|> app)
 
     add1 = kw "add1" *> (Add1 <$> expr)
 
     lambda = kw "lambda" *> (Lambda <$> argList <*> expr)
-      where argList = parens (rep1 varName)
+      where argList = parens (rep1 (do Located loc x <- varName
+                                       return (loc, x)))
 
-    pi = kw "Pi" *> (Pi <$> parens (rep1 (parens (pair <$> varName <*> expr))) <*> expr)
+    pi = kw "Pi" *> (Pi <$> typedBinders <*> expr)
 
     arrow = kw "->" *> (Arrow <$> expr <*> rep1 expr)
 
-    sigma = kw "Sigma" *> (Sigma <$> parens (rep1 (parens (pair <$> varName <*> expr))) <*> expr)
+    typedBinders = parens (rep1 (parens (do Located loc x <- varName
+                                            ty <- expr
+                                            return (loc, x, ty))))
+
+    sigma = kw "Sigma" *> (Sigma <$> typedBinders <*> expr)
     pairT = kw "Pair" *> (Pair <$> expr <*> expr)
     cons = kw "cons" *> (Cons <$> expr <*> expr)
     indNat = kw "ind-Nat" *> (IndNat <$> expr <*> expr <*> expr <*> expr)
@@ -276,17 +292,18 @@ expr' = asum [ u
     vecCons = kw "vec::" *> (VecCons <$> expr <*> expr)
 
     vecHead = kw "head" *> (VecHead <$> expr)
-    
+
     vecTail = kw "tail" *> (VecTail <$> expr)
 
     indVec = kw "ind-Vec" *> (IndVec <$> expr <*> expr <*> expr <*> expr <*> expr)
 
-    app = App <$> expr <*> expr <*> rep expr
+    app = App <$> expr <*> rep1 expr
 
-    makeNat :: Integer -> Parser (Expr' Expr)
-    makeNat i
-      | i < 1 = return Zero
-      | otherwise = Add1 . Expr <$> located (makeNat (i - 1))
+    makeNat :: Loc -> Integer -> Expr' Loc
+    makeNat loc i
+      | i < 1 = Zero
+      | otherwise =
+          Add1 (Expr loc (makeNat loc (i - 1)))
 
 testParser :: Parser a -> String -> Either (Positioned ParseErr) a
 testParser (Parser p) input =

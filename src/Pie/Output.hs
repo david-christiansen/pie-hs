@@ -9,44 +9,44 @@ import qualified Data.Text as T
 import Pie.Types
 
 resugar :: Core -> OutExpr
-resugar (CTick x) = OutExpr (Tick x)
-resugar CAtom = OutExpr Atom
-resugar CZero = OutExpr Zero
-resugar (CAdd1 k) = OutExpr (Add1 (resugar k))
+resugar (CTick x) = Expr () (Tick x)
+resugar CAtom = Expr () Atom
+resugar CZero = Expr () Zero
+resugar (CAdd1 k) = Expr () (Add1 (resugar k))
 resugar (CIndNat tgt mot base step) =
-  OutExpr (IndNat (resugar tgt) (resugar mot) (resugar base) (resugar step))
-resugar CNat = OutExpr Nat
-resugar (CVar x) = OutExpr (Var x)
-resugar (CPi x dom ran) = OutExpr (Pi ((x, resugar dom) :| []) (resugar ran)) -- TODO collapse
-resugar (CLambda x body) = OutExpr (Lambda (x :| []) (resugar body))
-resugar (CApp rator rand) = OutExpr (App (resugar rator) (resugar rand) [])
-resugar (CSigma x a d) = OutExpr (Sigma ((x, (resugar a)) :| []) (resugar d))
-resugar (CCons a d) = OutExpr (Cons (resugar a) (resugar d))
-resugar (CCar p) = OutExpr (Car (resugar p))
-resugar (CCdr p) = OutExpr (Cdr (resugar p))
-resugar CTrivial = OutExpr Trivial
-resugar CSole = OutExpr Sole
-resugar (CEq a from to) = OutExpr (Eq (resugar a) (resugar from) (resugar to))
-resugar (CSame e) = OutExpr (Same (resugar e))
+  Expr () (IndNat (resugar tgt) (resugar mot) (resugar base) (resugar step))
+resugar CNat = Expr () Nat
+resugar (CVar x) = Expr () (Var x)
+resugar (CPi x dom ran) = Expr () (Pi (((), x, resugar dom) :| []) (resugar ran)) -- TODO collapse
+resugar (CLambda x body) = Expr () (Lambda (((), x) :| []) (resugar body))
+resugar (CApp rator rand) = Expr () (App (resugar rator) (resugar rand :| []))
+resugar (CSigma x a d) = Expr () (Sigma (((), x, (resugar a)) :| []) (resugar d))
+resugar (CCons a d) = Expr () (Cons (resugar a) (resugar d))
+resugar (CCar p) = Expr () (Car (resugar p))
+resugar (CCdr p) = Expr () (Cdr (resugar p))
+resugar CTrivial = Expr () Trivial
+resugar CSole = Expr () Sole
+resugar (CEq a from to) = Expr () (Eq (resugar a) (resugar from) (resugar to))
+resugar (CSame e) = Expr () (Same (resugar e))
 resugar (CReplace tgt mot base) =
-  OutExpr (Replace (resugar tgt) (resugar mot) (resugar base))
-resugar (CTrans p1 p2) = OutExpr (Trans (resugar p1) (resugar p2))
-resugar (CCong p _ fun) = OutExpr (Cong (resugar p) (resugar fun))
-resugar (CSymm e) = OutExpr (Symm (resugar e))
-resugar (CIndEq tgt mot base) = OutExpr (IndEq (resugar tgt) (resugar mot) (resugar base))
-resugar (CVec elem len) = OutExpr (Vec (resugar elem) (resugar len))
-resugar (CVecCons e es) = OutExpr (VecCons (resugar e) (resugar es))
-resugar CVecNil = OutExpr VecNil
-resugar (CVecHead es) = OutExpr (VecHead (resugar es))
-resugar (CVecTail es) = OutExpr (VecTail (resugar es))
+  Expr () (Replace (resugar tgt) (resugar mot) (resugar base))
+resugar (CTrans p1 p2) = Expr () (Trans (resugar p1) (resugar p2))
+resugar (CCong p _ fun) = Expr () (Cong (resugar p) (resugar fun))
+resugar (CSymm e) = Expr () (Symm (resugar e))
+resugar (CIndEq tgt mot base) = Expr () (IndEq (resugar tgt) (resugar mot) (resugar base))
+resugar (CVec elem len) = Expr () (Vec (resugar elem) (resugar len))
+resugar (CVecCons e es) = Expr () (VecCons (resugar e) (resugar es))
+resugar CVecNil = Expr () VecNil
+resugar (CVecHead es) = Expr () (VecHead (resugar es))
+resugar (CVecTail es) = Expr () (VecTail (resugar es))
 resugar (CIndVec len es mot base step) =
-  OutExpr (IndVec (resugar len) (resugar es) (resugar mot) (resugar base) (resugar step))
-resugar CU = OutExpr U
-resugar (CThe t e) = OutExpr (The (resugar t) (resugar e))
+  Expr () (IndVec (resugar len) (resugar es) (resugar mot) (resugar base) (resugar step))
+resugar CU = Expr () U
+resugar (CThe t e) = Expr () (The (resugar t) (resugar e))
 
 -- TODO newlines and indentation and such - this is a placeholder
 pp :: OutExpr -> Text
-pp (OutExpr e) = pp' e
+pp (Expr () e) = pp' e
 
 pp' (Tick x) = T.pack "'" <> symbolName x
 pp' Atom = T.pack "Atom"
@@ -59,11 +59,11 @@ pp' (Arrow dom (ran:|rans)) = T.pack "(→ " <> pp dom <> T.pack " " <> spaced (
 pp' (Pi args body) = T.pack "(Π (" <> binds args <> T.pack ") " <> pp body <> T.pack ")"
   where binds (b :| []) = bind b
         binds (b :| (b':bs)) = bind b <> T.pack " " <> binds (b' :| bs)
-        bind (x, e) = T.pack "(" <> symbolName x <> T.pack " " <> pp e <> T.pack ")"
+        bind (_, x, e) = T.pack "(" <> symbolName x <> T.pack " " <> pp e <> T.pack ")"
 pp' (Lambda xs body) = T.pack "(λ (" <> args xs <> T.pack ") " <> pp body <> T.pack ")"
-  where args (x :| []) = symbolName x
-        args (x :| (y:xs)) = symbolName x <> T.pack " " <> args (y:|xs)
-pp' (App rator rand1 rands) =
+  where args ((_, x) :| []) = symbolName x
+        args ((_, x) :| (y:xs)) = symbolName x <> T.pack " " <> args (y:|xs)
+pp' (App rator (rand1 :| rands)) =
   T.pack "(" <> pp rator <> T.pack " " <> pp rand1 <> more rands <> T.pack ")"
   where
     more [] = T.empty
@@ -72,7 +72,7 @@ pp' (App rator rand1 rands) =
 pp' (Sigma args body) = T.pack "(Σ (" <> binds args <> T.pack ") " <> pp body <> T.pack ")"
   where binds (b :| []) = bind b
         binds (b :| (b':bs)) = bind b <> T.pack " " <> binds (b' :| bs)
-        bind (x, e) = T.pack "(" <> symbolName x <> T.pack " " <> pp e <> T.pack ")"
+        bind (_, x, e) = T.pack "(" <> symbolName x <> T.pack " " <> pp e <> T.pack ")"
 pp' (Pair a d) = T.pack "(Pair " <> pp a <> T.pack " " <> pp d <> T.pack ")"
 pp' (Cons a d) = T.pack "(cons " <> pp a <> T.pack " " <> pp d <> T.pack ")"
 pp' (Car p) = T.pack "(car " <> pp p <> T.pack ")"
