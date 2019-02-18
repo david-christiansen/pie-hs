@@ -5,6 +5,8 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Pie.Panic
+
 data Bwd a = None | Bwd a :> a
   deriving (Eq, Ord, Show)
 
@@ -39,6 +41,10 @@ pieKeywords =
 data Pos = Pos { posLine :: Int, posCol :: Int }
   deriving (Eq, Show)
 
+instance Ord Pos where
+  compare (Pos l1 c1) (Pos l2 c2) =
+    compare l1 l2 <> compare c1 c2
+
 data Positioned a = Positioned Pos a
   deriving (Eq, Show)
 
@@ -53,6 +59,13 @@ data Loc = Loc { locSource :: FilePath
                , locEnd :: Pos
                }
   deriving (Eq, Show)
+
+instance Ord Loc where
+  compare (Loc src1 s1 e1) (Loc src2 s2 e2) =
+    if src1 /= src2
+      then panic ("Tried to compare locations from different souce files: " ++
+                  src1 ++ " and " ++ src2)
+      else compare s1 s2 <> compare e1 e2
 
 printLoc :: Loc -> Text
 printLoc (Loc source start end) =
@@ -202,3 +215,8 @@ type Env a = Bwd (Symbol, a)
 
 data MessagePart a = MText Text | MVal a
   deriving Show
+
+data ElabInfo = ExprHasType Core
+              | ExprIsType
+              | ExprWillHaveType Core -- ^ TODOs
+

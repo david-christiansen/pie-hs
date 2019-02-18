@@ -89,7 +89,8 @@ mustParseExpr :: String -> IO Expr
 mustParseExpr = mustParse P.expr
 
 mustElab :: E.Elab a -> IO a
-mustElab act = mustSucceed (E.runElab act None (Loc "<test suite>" (Pos 1 1) (Pos 1 1)) [])
+mustElab act =
+  mustSucceed (snd (E.runElab act None (Loc "<test suite>" (Pos 1 1) (Pos 1 1)) []))
 
 
 mustBeAlphaEquiv :: Core -> Core -> IO ()

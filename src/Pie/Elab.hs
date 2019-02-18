@@ -24,30 +24,42 @@ data E = C Core | E Expr
 newtype ElabErr = ElabErr (Located [MessagePart E])
   deriving Show
 
+
 newtype Elab a =
   Elab
     { runElab ::
         Ctx Value ->
         Loc ->
         [(Symbol, Symbol)] ->
-        Either ElabErr a
+        ([Located ElabInfo], Either ElabErr a)
     }
 
 instance Functor Elab where
-  fmap f (Elab act) = Elab (\ ctx loc ren -> fmap f (act ctx loc ren))
+  fmap f (Elab act) =
+    Elab (\ ctx loc ren ->
+            let (info, out) = act ctx loc ren
+            in (info, fmap f out))
 
 instance Applicative Elab where
-  pure x = Elab (\ _ _ _ -> (pure x))
+  pure x = Elab (\ _ _ _ -> ([], pure x))
   Elab fun <*> Elab arg =
-    Elab (\ctx loc ren -> fun ctx loc ren <*> arg ctx loc ren)
+    Elab (\ctx loc ren ->
+            let (funInfo, theFun) = fun ctx loc ren
+                (argInfo, theArg) = arg ctx loc ren
+            in (funInfo ++ argInfo, theFun <*> theArg))
 
 instance Monad Elab where
   return = pure
   Elab act >>= f =
     Elab (\ ctx loc ren ->
             case act ctx loc ren of
-              Left err -> Left err
-              Right v -> runElab (f v) ctx loc ren)
+              (info, Left err) -> (info, Left err)
+              (info, Right v)  ->
+                let (moreInfo, val) = runElab (f v) ctx loc ren
+                in (info ++ moreInfo, val))
+
+logInfo :: ElabInfo -> Elab ()
+logInfo info = Elab (\_ loc _ -> ([Located loc info], pure ()))
 
 fresh :: Symbol -> Elab Symbol
 fresh x =
@@ -55,20 +67,20 @@ fresh x =
      return (freshen used x)
 
 failure :: [MessagePart E] -> Elab a
-failure msg = Elab (\ ctx loc _ -> Left (ElabErr (Located loc msg)))
+failure msg = Elab (\ ctx loc _ -> ([], Left (ElabErr (Located loc msg))))
 
 getCtx :: Elab (Ctx Value)
-getCtx = Elab (\ ctx _ _ -> pure ctx)
+getCtx = Elab (\ ctx _ _ -> ([], pure ctx))
 
 currentLoc :: Elab Loc
-currentLoc = Elab (\_ loc _ -> pure loc)
+currentLoc = Elab (\_ loc _ -> ([], pure loc))
 
 applyRenaming :: Symbol -> Elab Symbol
 applyRenaming x =
   Elab (\ _ _ ren ->
           case lookup x ren of
             Nothing -> panic ("Can't rename " ++ show x ++ " in " ++ show ren)
-            Just y -> pure y)
+            Just y -> ([], pure y))
 
 rename :: Symbol -> Symbol -> Elab a -> Elab a
 rename from to (Elab act) =
@@ -197,7 +209,12 @@ toplevel e =
      eN <- readBack (NThe tv val)
      return (CThe t eN)
 
-synth e = inExpr e synth'
+synth :: Expr -> Elab SynthResult
+synth e =
+  do res@(SThe tv _) <- inExpr e synth'
+     t <- readBackType tv
+     logInfo (ExprHasType t)
+     return res
 
 synth' (Tick x) = pure (SThe VAtom (CTick x)) -- TODO check validity of x
 synth' Atom = pure (SThe VU CAtom)
@@ -349,7 +366,11 @@ synth' other =
              ]
 
 check :: Value -> Expr -> Elab Core
-check t e = inExpr e (check' t)
+check t e =
+  do res <- inExpr e (check' t)
+     tc <- readBackType t
+     logInfo (ExprHasType tc)
+     return res
 
 check' t (Lambda ((loc, x) :| xs) body) =
   case t of

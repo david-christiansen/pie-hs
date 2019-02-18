@@ -98,3 +98,14 @@ pp' (The t e) = T.pack "(the " <> pp t <> T.pack " " <> pp e <> T.pack ")"
 spaced ss = mconcat (intersperse (T.pack " ") ss)
 
 list name args = T.pack "(" <> T.pack name <> T.pack " " <> spaced (map pp args) <> T.pack ")"
+
+printInfo :: ElabInfo -> Text
+printInfo (ExprHasType c) =
+  T.pack "Has type " <> pp (resugar c)
+printInfo ExprIsType = T.pack "A type"
+printInfo (ExprWillHaveType c) =
+  T.pack "Will have type " <> pp (resugar c)
+
+dumpLocElabInfo :: Located ElabInfo -> Text
+dumpLocElabInfo (Located loc info) =
+  printLoc loc <> T.pack ": " <> printInfo info
