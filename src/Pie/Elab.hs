@@ -143,7 +143,10 @@ inExpr (Expr loc e) act =
           runElab (act e) ctx loc ren)
 
 isType :: Expr -> Elab Core
-isType e = inExpr e isType'
+isType e =
+  do res <- inExpr e isType'
+     inExpr e (const (logInfo ExprIsType))
+     return res
 
 isType' :: (Expr' Loc) -> Elab Core
 isType' U = pure CU
@@ -213,7 +216,7 @@ synth :: Expr -> Elab SynthResult
 synth e =
   do res@(SThe tv _) <- inExpr e synth'
      t <- readBackType tv
-     logInfo (ExprHasType t)
+     inExpr e (const (logInfo (ExprHasType t)))
      return res
 
 synth' (Tick x) = pure (SThe VAtom (CTick x)) -- TODO check validity of x
@@ -369,7 +372,7 @@ check :: Value -> Expr -> Elab Core
 check t e =
   do res <- inExpr e (check' t)
      tc <- readBackType t
-     logInfo (ExprHasType tc)
+     inExpr e (const (logInfo (ExprHasType tc)))
      return res
 
 check' t (Lambda ((loc, x) :| xs) body) =

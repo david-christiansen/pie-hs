@@ -86,6 +86,9 @@ data Located a = Located Loc a
 instance Functor Located where
   fmap f (Located loc x) = Located loc (f x)
 
+getLoc :: Located a -> Loc
+getLoc (Located loc _) = loc
+
 unLocate :: Located a -> a
 unLocate (Located _ x) = x
 

@@ -1,5 +1,6 @@
 module Main where
 
+import Data.List
 import Data.Traversable
 import qualified Data.Text.IO as T
 import System.IO
@@ -14,7 +15,7 @@ main =
      repl
 
 dumpInfo infos =
-  traverse (T.putStrLn . dumpLocElabInfo) infos *> pure ()
+  traverse (T.putStrLn . dumpLocElabInfo) (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos) *> pure ()
 
 repl :: IO ()
 repl =
