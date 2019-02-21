@@ -167,6 +167,11 @@ data Core = CTick Symbol
           | CThe Core Core
   deriving Show
 
+data TopLevel a = Claim (Located Symbol) a
+                | Define (Located Symbol) a
+                | CheckSame a a a
+                | Example a
+
 data Value = VTick Symbol
            | VAtom
            | VNat
@@ -222,4 +227,8 @@ data MessagePart a = MText Text | MVal a
 data ElabInfo = ExprHasType Core
               | ExprIsType
               | ExprWillHaveType Core -- ^ TODOs
+              | ClaimAt Loc
+              | BoundAt Loc
+              | ExampleOut Core
+
 

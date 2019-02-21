@@ -9,8 +9,18 @@ import qualified Pie.Normalize as Norm
 import Pie.Panic
 import Pie.Types
 
-data CtxEntry a =
-  HasType a
+data CtxEntry a = HasType (Maybe Loc) a
+                | Claimed Loc a
+                | Defined Loc a a -- ^ type then value
+  deriving Show
+
+entryType (HasType _ t) = t
+entryType (Defined _ t _) = t
+entryType (Claimed _ t) = t
+
+inScope :: CtxEntry a -> Bool
+inScope (Claimed _ _) = False
+inScope _ = True
 
 type Ctx a = Bwd (Symbol, CtxEntry a)
 
@@ -90,18 +100,22 @@ withModifiedCtx :: (Ctx Value -> Ctx Value) -> Elab a -> Elab a
 withModifiedCtx f (Elab act) =
   Elab (\ctx loc ren -> act (f ctx) loc ren)
 
-withCtxExtension :: Symbol -> Value -> Elab a -> Elab a
-withCtxExtension x t = withModifiedCtx (:> (x, HasType t))
+withCtxExtension :: Symbol -> Maybe Loc -> Value -> Elab a -> Elab a
+withCtxExtension x loc t = withModifiedCtx (:> (x, HasType loc t))
 
 toEnv None = None
-toEnv (ctx :> (x, HasType t)) =
+toEnv (ctx :> (x, HasType _ t)) =
   toEnv ctx :> (x, VNeu t (NVar x))
+toEnv (ctx :> (x, Defined _ _ d)) =
+  toEnv ctx :> (x, d)
+toEnv (ctx :> (_, Claimed _ _)) =
+  toEnv ctx
 
 runNorm :: Norm.Norm a -> Elab a
 runNorm n =
   do usedNames <- names <$> getCtx
      initEnv <- toEnv <$> getCtx
-     let val = Norm.runNormalize n usedNames initEnv
+     let val = Norm.runNorm n usedNames initEnv
      return val
 
 
@@ -111,7 +125,7 @@ eval = runNorm . Norm.eval
 evalInEnv :: Env Value -> Core -> Elab Value
 evalInEnv env c =
   do usedNames <- names <$> getCtx
-     return (Norm.runNormalize (Norm.eval c) usedNames env)
+     return (Norm.runNorm (Norm.eval c) usedNames env)
 
 
 doCar :: Value -> Elab Value
@@ -156,7 +170,7 @@ isType' (Arrow dom (t:|ts)) =
   do x <- fresh (Symbol (T.pack "x"))
      dom' <- isType dom
      domVal <- eval dom'
-     ran' <- withCtxExtension x domVal $
+     ran' <- withCtxExtension x Nothing domVal $
              case ts of
                [] ->
                  isType t
@@ -167,7 +181,7 @@ isType' (Pi ((loc, x, dom) :| doms) ran) =
   do dom' <- isType dom
      domVal <- eval dom'
      x' <- fresh x
-     ran' <- withCtxExtension x' domVal $
+     ran' <- withCtxExtension x' (Just loc) domVal $
              rename x x' $
              case doms of
                [] ->
@@ -179,13 +193,13 @@ isType' (Pair a d) =
   do x <- fresh (Symbol (T.pack "x"))
      a' <- isType a
      aVal <- eval a'
-     d' <- withCtxExtension x aVal $ isType d
+     d' <- withCtxExtension x Nothing aVal $ isType d
      return (CSigma x a' d')
 isType' (Sigma ((loc, x, a) :| as) d) =
   do a' <- isType a
      aVal <- eval a'
      x' <- fresh x
-     d' <- withCtxExtension x aVal $
+     d' <- withCtxExtension x (Just loc) aVal $
            rename x x' $
              case as of
                [] ->
@@ -252,14 +266,15 @@ synth' (Var x) =
     findVar x' None =
       do loc <- currentLoc
          failure [MText (T.pack "Unknown variable"), MVal (E (Expr loc (Var x)))]
-    findVar x' (ctx' :> (y, HasType t))
-      | x' == y = pure (SThe t (CVar x'))
+    findVar x' (ctx' :> (y, info))
+      | x' == y =
+         pure (SThe (entryType info) (CVar x'))
       | otherwise = findVar x' ctx'
 synth' (Arrow dom (t:|ts)) =
   do x <- fresh (Symbol (T.pack "x"))
      dom' <- check VU  dom
      domVal <- eval dom'
-     ran' <- withCtxExtension x domVal $
+     ran' <- withCtxExtension x Nothing domVal $
              case ts of
                [] ->
                  check VU t
@@ -269,7 +284,7 @@ synth' (Arrow dom (t:|ts)) =
 synth' (Pi ((loc, x, dom) :| doms) ran) =
   do dom' <- check VU dom
      domVal <- eval dom'
-     ran' <- withCtxExtension x domVal $
+     ran' <- withCtxExtension x (Just loc) domVal $
              case doms of
                [] ->
                  check VU ran
@@ -279,7 +294,7 @@ synth' (Pi ((loc, x, dom) :| doms) ran) =
 synth' (Sigma ((loc, x, a) :| as) d) =
   do a' <- check VU a
      aVal <- eval a'
-     d' <- withCtxExtension x aVal $
+     d' <- withCtxExtension x (Just loc) aVal $
              case as of
                [] ->
                  check VU d
@@ -290,7 +305,7 @@ synth' (Pair a d) =
   do a' <- check VU a
      aVal <- eval a'
      x <- fresh (sym "a")
-     d' <- withCtxExtension x aVal $ check VU d
+     d' <- withCtxExtension x Nothing aVal $ check VU d
      return (SThe VU (CSigma x a' d'))
 synth' (Car p) =
   do SThe ty p' <- synth p
@@ -379,7 +394,7 @@ check' t (Lambda ((loc, x) :| xs) body) =
   case t of
     VPi y dom ran ->
       do z <- fresh y
-         withCtxExtension z dom $
+         withCtxExtension z (Just loc) dom $
            do bodyT <- instantiate ran y (VNeu dom (NVar z))
               case xs of
                 [] ->

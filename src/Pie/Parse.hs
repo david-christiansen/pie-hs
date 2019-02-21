@@ -305,6 +305,16 @@ expr' = asum [ u
       | otherwise =
           Add1 (Expr loc (makeNat loc (i - 1)))
 
+topLevel :: Parser (Located (TopLevel Expr))
+topLevel = parensLoc topLevel' <|>
+           ((\e@(Expr loc _) -> Located loc (Example e)) <$> expr)
+
+topLevel' = claim <|> define <|> checkSame
+  where
+    claim = kw "claim" *> (Claim <$> varName <*> expr)
+    define = kw "define" *> (Define <$> varName <*> expr)
+    checkSame = kw "check-same" *> (CheckSame <$> expr <*> expr <*> expr)
+
 testParser :: Parser a -> String -> Either (Positioned ParseErr) a
 testParser (Parser p) input =
   let initSt = ParserState (T.pack input) (Pos 1 1)

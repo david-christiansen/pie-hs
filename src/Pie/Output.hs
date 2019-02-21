@@ -105,6 +105,12 @@ printInfo (ExprHasType c) =
 printInfo ExprIsType = T.pack "A type"
 printInfo (ExprWillHaveType c) =
   T.pack "Will have type " <> pp (resugar c)
+printInfo (ClaimAt loc) =
+  T.pack "Claim from " <> printLoc loc
+printInfo (BoundAt loc) =
+  T.pack "Bound at " <> printLoc loc
+printInfo (ExampleOut c) =
+  pp (resugar c)
 
 dumpLocElabInfo :: Located ElabInfo -> Text
 dumpLocElabInfo (Located loc info) =

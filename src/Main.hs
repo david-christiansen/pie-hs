@@ -5,34 +5,36 @@ import Data.Traversable
 import qualified Data.Text.IO as T
 import System.IO
 
-import Pie.Elab
+import Pie.Elab (Ctx)
 import Pie.Output
 import Pie.Parse
+import Pie.TopLevel
 import Pie.Types
 
 main =
   do hSetBuffering stdout NoBuffering
-     repl
+     repl (TopState None [])
 
 dumpInfo infos =
-  traverse (T.putStrLn . dumpLocElabInfo) (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos) *> pure ()
+  traverse (T.putStrLn . dumpLocElabInfo)
+    (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos) *>
+  pure ()
 
-repl :: IO ()
-repl =
+repl :: TopState -> IO ()
+repl st =
   do putStr "Π> "
      l <- getLine
-     let e = testParser expr l
-     case e of
-       Left err -> print err
-       Right expr ->
-         case runElab (isType expr) None (Loc "<interactive>" (Pos 1 0) (Pos 1 (length l))) [] of
-           (_, Left _) ->
-             case runElab (toplevel expr) None (Loc "<interactive>" (Pos 1 0) (Pos 1 (length l))) [] of
-               (infos, Left err) -> print err *> dumpInfo infos
-               (infos, Right e) ->
-                 do T.putStrLn (pp (resugar e))
-                    dumpInfo infos
-           (infos, Right ok) ->
-             do T.putStrLn (pp (resugar ok))
-                dumpInfo infos
-     main
+     if l == ":dump"
+       then print st *> repl st
+       else do let e = testParser topLevel l
+               case e of
+                 Left err -> print err
+                 Right parsed@(Located loc _) ->
+                   do let (info, res) = runTopElab (top parsed) st loc
+                      dumpInfo info
+                      case res of
+                        Left err ->
+                          do print err
+                             repl st
+                        Right ((), st') ->
+                          repl st'

@@ -34,6 +34,7 @@ library
                      , Pie.Output
                      , Pie.Panic
                      , Pie.Parse
+                     , Pie.TopLevel
                      , Pie.Types
 
 test-suite pie-tests

@@ -6,7 +6,7 @@ import Pie.Types
 
 newtype Norm a =
   Norm
-    { runNormalize :: [Symbol] -> Env Value -> a }
+    { runNorm :: [Symbol] -> Env Value -> a }
 
 instance Functor Norm where
   fmap f (Norm action) = Norm (\ bound env -> f (action bound env))
@@ -18,7 +18,7 @@ instance Applicative Norm where
 instance Monad Norm where
   return = pure
   Norm val >>= f =
-    Norm (\bound env -> runNormalize (f (val bound env)) bound env)
+    Norm (\bound env -> runNorm (f (val bound env)) bound env)
 
 getEnv :: Norm (Env Value)
 getEnv = Norm (\ bound env -> env)
@@ -258,6 +258,7 @@ readBack (NThe (VVec elem (VAdd1 len)) (VVecCons v vs)) =
   CVecCons <$> readBack (NThe elem v) <*> readBack (NThe (VVec elem len) vs)
 readBack (NThe VU t) = readBackType t
 readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
+readBack other = error (show other)
 
 readBackType :: Value -> Norm Core
 readBackType VAtom = return CAtom
@@ -276,6 +277,7 @@ readBackType (VEq t from to) =
 readBackType (VVec elem len) =
   CVec <$> readBackType elem <*> readBack (NThe VNat len)
 readBackType VU = return CU
+readBackType other = error (show other)
 
 readBackNeutral :: Neutral -> Norm Core
 readBackNeutral (NVar x) = return (CVar x)
