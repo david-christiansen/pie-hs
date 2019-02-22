@@ -239,6 +239,11 @@ synth' Zero = pure (SThe VNat CZero)
 synth' (Add1 n) =
   do n' <- check VNat n
      return (SThe VNat (CAdd1 n'))
+synth' (NatLit n)
+  | n <= 0 = synth' Zero
+  | otherwise =
+    do loc <- currentLoc
+       synth' (Add1 (Expr loc (NatLit (n - 1))))
 synth' (IndNat tgt mot base step) =
   do tgt' <- check VNat tgt
      k <- fresh (sym "k")

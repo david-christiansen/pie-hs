@@ -103,6 +103,7 @@ data Expr' loc = Tick Symbol
                | Atom
                | Zero
                | Add1 (LocatedExpr loc)
+               | NatLit Integer
                | IndNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | Nat
                | Var Symbol
@@ -165,7 +166,7 @@ data Core = CTick Symbol
           | CIndVec Core Core Core Core Core
           | CU
           | CThe Core Core
-  deriving Show
+  deriving (Eq, Show)
 
 data TopLevel a = Claim (Located Symbol) a
                 | Define (Located Symbol) a
@@ -230,5 +231,5 @@ data ElabInfo = ExprHasType Core
               | ClaimAt Loc
               | BoundAt Loc
               | ExampleOut Core
-
+  deriving Eq
 

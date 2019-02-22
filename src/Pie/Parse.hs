@@ -239,7 +239,7 @@ expr' = asum [ u
     tick = do Located loc x <- token (litChar '\'' *> ident)  -- TODO separate atom name from var name - atom name has fewer possibilities!
               return (Located loc (Tick (Symbol x)))
     natLit = do Located loc i <- token (regex (T.pack "natural number literal") "[0-9]+")
-                return (Located loc (makeNat loc (read (T.unpack i))))
+                return (Located loc (NatLit (read (T.unpack i))))
     vecNil = atomic "vecnil" VecNil
     compound =
       parensLoc (asum [ add1, indNat
@@ -299,11 +299,6 @@ expr' = asum [ u
 
     app = App <$> expr <*> rep1 expr
 
-    makeNat :: Loc -> Integer -> Expr' Loc
-    makeNat loc i
-      | i < 1 = Zero
-      | otherwise =
-          Add1 (Expr loc (makeNat loc (i - 1)))
 
 topLevel :: Parser (Located (TopLevel Expr))
 topLevel = parensLoc topLevel' <|>

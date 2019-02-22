@@ -17,7 +17,7 @@ main =
 
 dumpInfo infos =
   traverse (T.putStrLn . dumpLocElabInfo)
-    (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos) *>
+    (nub (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos)) *>
   pure ()
 
 repl :: TopState -> IO ()

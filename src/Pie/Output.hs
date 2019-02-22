@@ -12,7 +12,11 @@ resugar :: Core -> OutExpr
 resugar (CTick x) = Expr () (Tick x)
 resugar CAtom = Expr () Atom
 resugar CZero = Expr () Zero
-resugar (CAdd1 k) = Expr () (Add1 (resugar k))
+resugar (CAdd1 k) =
+  case resugar k of
+    Expr () Zero -> Expr () (NatLit 1)
+    Expr () (NatLit n) -> Expr () (NatLit (1 + n))
+    other -> Expr () (Add1 other)
 resugar (CIndNat tgt mot base step) =
   Expr () (IndNat (resugar tgt) (resugar mot) (resugar base) (resugar step))
 resugar CNat = Expr () Nat
@@ -52,6 +56,7 @@ pp' (Tick x) = T.pack "'" <> symbolName x
 pp' Atom = T.pack "Atom"
 pp' Zero = T.pack "zero"
 pp' (Add1 n) = T.pack "(add1 " <> pp n <> T.pack ")"
+pp' (NatLit n) = T.pack (show n)
 pp' (IndNat tgt mot base step) = T.pack "(ind-Nat " <> spaced (map pp [tgt, mot, base, step]) <> T.pack ")"
 pp' Nat = T.pack "Nat"
 pp' (Var x) = symbolName x
