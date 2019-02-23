@@ -8,45 +8,113 @@ import qualified Data.Text as T
 
 import Pie.Types
 
-resugar :: Core -> OutExpr
-resugar (CTick x) = Expr () (Tick x)
-resugar CAtom = Expr () Atom
-resugar CZero = Expr () Zero
+remove x [] = []
+remove x (y:ys) | x == y = remove x ys
+                | otherwise = y : remove x ys
+
+resugar :: Core -> (OutExpr, [Symbol])
+resugar (CTick x) = resugar0 (Tick x)
+resugar CAtom = resugar0 Atom
+resugar CZero = resugar0 Zero
 resugar (CAdd1 k) =
   case resugar k of
-    Expr () Zero -> Expr () (NatLit 1)
-    Expr () (NatLit n) -> Expr () (NatLit (1 + n))
-    other -> Expr () (Add1 other)
-resugar (CIndNat tgt mot base step) =
-  Expr () (IndNat (resugar tgt) (resugar mot) (resugar base) (resugar step))
-resugar CNat = Expr () Nat
-resugar (CVar x) = Expr () (Var x)
-resugar (CPi x dom ran) = Expr () (Pi (((), x, resugar dom) :| []) (resugar ran)) -- TODO collapse
-resugar (CLambda x body) = Expr () (Lambda (((), x) :| []) (resugar body))
-resugar (CApp rator rand) = Expr () (App (resugar rator) (resugar rand :| []))
-resugar (CSigma x a d) = Expr () (Sigma (((), x, (resugar a)) :| []) (resugar d))
-resugar (CCons a d) = Expr () (Cons (resugar a) (resugar d))
-resugar (CCar p) = Expr () (Car (resugar p))
-resugar (CCdr p) = Expr () (Cdr (resugar p))
-resugar CTrivial = Expr () Trivial
-resugar CSole = Expr () Sole
-resugar (CEq a from to) = Expr () (Eq (resugar a) (resugar from) (resugar to))
-resugar (CSame e) = Expr () (Same (resugar e))
-resugar (CReplace tgt mot base) =
-  Expr () (Replace (resugar tgt) (resugar mot) (resugar base))
-resugar (CTrans p1 p2) = Expr () (Trans (resugar p1) (resugar p2))
-resugar (CCong p _ fun) = Expr () (Cong (resugar p) (resugar fun))
-resugar (CSymm e) = Expr () (Symm (resugar e))
-resugar (CIndEq tgt mot base) = Expr () (IndEq (resugar tgt) (resugar mot) (resugar base))
-resugar (CVec elem len) = Expr () (Vec (resugar elem) (resugar len))
-resugar (CVecCons e es) = Expr () (VecCons (resugar e) (resugar es))
-resugar CVecNil = Expr () VecNil
-resugar (CVecHead es) = Expr () (VecHead (resugar es))
-resugar (CVecTail es) = Expr () (VecTail (resugar es))
+    (Expr () Zero, _) -> (Expr () (NatLit 1), [])
+    (Expr () (NatLit n), _) -> (Expr () (NatLit (1 + n)), [])
+    (other, free) -> (Expr () (Add1 other), free)
+resugar (CIndNat tgt mot base step) = resugar4 IndNat tgt mot base step
+resugar CNat = resugar0 Nat
+resugar (CVar x) = (Expr () (Var x), [x])
+resugar (CPi x dom ran) =
+  let (dom', domf) = resugar dom
+      (ran', ranf) = resugar ran
+  in
+    case ran' of
+      (Expr () (Pi (d1 :| ds) ran'')) ->
+        (Expr () (Pi (((), x, dom') :| (d1:ds)) ran''), domf ++ remove x ranf)
+      other ->
+        (Expr () (Pi (((), x, dom') :| []) ran'), domf ++ remove x ranf)
+resugar (CLambda x body) =
+  let (body', bodyf) = resugar body
+  in
+    case body' of
+      (Expr () (Lambda (y :| ys) body'')) ->
+        (Expr () (Lambda (((), x) :| (y:ys)) body''),
+         remove x bodyf)
+      other ->
+        (Expr () (Lambda (((), x) :| []) other),
+         remove x bodyf)
+resugar (CApp rator rand) =
+  let (rator', ratorf) = resugar rator
+      (rand', randf) = resugar rand
+  in
+    case rator' of
+      (Expr () (App rator'' (rand1:|rands))) ->
+        (Expr () (App rator' (rator'' :| (rand1:rands))), ratorf ++ randf)
+      other ->
+        (Expr () (App other (rand' :| [])), ratorf ++ randf)
+resugar (CSigma x a d) =
+  let (a', af) = resugar a
+      (d', df) = resugar d
+  in
+    if x `elem` df
+      then (Expr () (Sigma (((), x, a') :| []) d'), af ++ remove x df)
+      else (Expr () (Pair a' d'), af ++ df)
+resugar (CCons a d) = resugar2 Cons a d
+resugar (CCar p) = resugar1 Car p
+resugar (CCdr p) = resugar1 Cdr p
+resugar CTrivial = resugar0 Trivial
+resugar CSole = resugar0 Sole
+resugar (CEq a from to) = resugar3 Eq a from to
+resugar (CSame e) = resugar1 Same e
+resugar (CReplace tgt mot base) = resugar3 Replace tgt mot base
+resugar (CTrans p1 p2) = resugar2 Trans p1 p2
+resugar (CCong p _ fun) = resugar2 Cong p fun
+resugar (CSymm e) = resugar1 Symm e
+resugar (CIndEq tgt mot base) = resugar3 IndEq tgt mot base
+resugar (CVec elem len) = resugar2 Vec elem len
+resugar (CVecCons e es) = resugar2 VecCons e es
+resugar CVecNil = (Expr () VecNil, [])
+resugar (CVecHead es) = resugar1 VecHead es
+resugar (CVecTail es) = resugar1 VecTail es
 resugar (CIndVec len es mot base step) =
-  Expr () (IndVec (resugar len) (resugar es) (resugar mot) (resugar base) (resugar step))
-resugar CU = Expr () U
-resugar (CThe t e) = Expr () (The (resugar t) (resugar e))
+  let (len', lenf) = resugar len
+      (es', esf) = resugar es
+      (mot', motf) = resugar mot
+      (base', basef) = resugar base
+      (step', stepf) = resugar step
+  in
+    (Expr () (IndVec len' es' mot' base' step'),
+     lenf ++ esf ++ motf ++ basef ++ stepf)
+resugar CU = resugar0 U
+resugar (CThe t e) = resugar2 The t e
+
+resugar0 f =
+  (Expr () f, [])
+resugar1 f e =
+  let (e', ef) = resugar e
+  in (Expr () (f e'), ef)
+resugar2 f e1 e2 =
+  let (e1', e1f) = resugar e1
+      (e2', e2f) = resugar e2
+  in (Expr () (f e1' e2'), e1f ++ e2f)
+resugar3 f e1 e2 e3 =
+  let (e1', e1f) = resugar e1
+      (e2', e2f) = resugar e2
+      (e3', e3f) = resugar e3
+  in (Expr () (f e1' e2' e3'), e1f ++ e2f ++ e3f)
+resugar4 f e1 e2 e3 e4 =
+  let (e1', e1f) = resugar e1
+      (e2', e2f) = resugar e2
+      (e3', e3f) = resugar e3
+      (e4', e4f) = resugar e4
+  in (Expr () (f e1' e2' e3' e4'), e1f ++ e2f ++ e3f ++ e4f)
+resugar5 f e1 e2 e3 e4 e5 =
+  let (e1', e1f) = resugar e1
+      (e2', e2f) = resugar e2
+      (e3', e3f) = resugar e3
+      (e4', e4f) = resugar e4
+      (e5', e5f) = resugar e5
+  in (Expr () (f e1' e2' e3' e4' e5'), e1f ++ e2f ++ e3f ++ e4f ++ e5f)
 
 -- TODO newlines and indentation and such - this is a placeholder
 pp :: OutExpr -> Text
@@ -106,16 +174,16 @@ list name args = T.pack "(" <> T.pack name <> T.pack " " <> spaced (map pp args)
 
 printInfo :: ElabInfo -> Text
 printInfo (ExprHasType c) =
-  T.pack "Has type " <> pp (resugar c)
+  T.pack "Has type " <> pp (fst (resugar c))
 printInfo ExprIsType = T.pack "A type"
 printInfo (ExprWillHaveType c) =
-  T.pack "Will have type " <> pp (resugar c)
+  T.pack "Will have type " <> pp (fst (resugar c))
 printInfo (ClaimAt loc) =
   T.pack "Claim from " <> printLoc loc
 printInfo (BoundAt loc) =
   T.pack "Bound at " <> printLoc loc
 printInfo (ExampleOut c) =
-  pp (resugar c)
+  pp (fst (resugar c))
 
 dumpLocElabInfo :: Located ElabInfo -> Text
 dumpLocElabInfo (Located loc info) =
