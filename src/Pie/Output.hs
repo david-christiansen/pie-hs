@@ -12,6 +12,25 @@ remove x [] = []
 remove x (y:ys) | x == y = remove x ys
                 | otherwise = y : remove x ys
 
+addPi x ty (Pi (dom :| doms) ran) =
+  Pi (((), x, ty) :| (dom : doms)) ran
+addPi x ty other =
+  Pi (((), x, ty) :| []) (Expr () other)
+
+addArrow ty (Arrow dom (ran :| rans)) =
+  Arrow ty (dom :| (ran : rans))
+addArrow ty other =
+  Arrow ty (Expr () other :| [])
+
+addSigma x a (Sigma (a' :| as) d) =
+  Sigma (((), x, a) :| (a' : as)) d
+addSigma x a other =
+  Sigma (((), x, a) :| []) (Expr () other)
+
+addLambda x (Lambda (y :| ys) body) =
+  Lambda (((), x) :| (y : ys)) body
+addLambda x other = Lambda (((), x) :| []) (Expr () other)
+
 resugar :: Core -> (OutExpr, [Symbol])
 resugar (CTick x) = resugar0 (Tick x)
 resugar CAtom = resugar0 Atom
@@ -26,23 +45,14 @@ resugar CNat = resugar0 Nat
 resugar (CVar x) = (Expr () (Var x), [x])
 resugar (CPi x dom ran) =
   let (dom', domf) = resugar dom
-      (ran', ranf) = resugar ran
+      (Expr () ran', ranf) = resugar ran
   in
-    case ran' of
-      (Expr () (Pi (d1 :| ds) ran'')) ->
-        (Expr () (Pi (((), x, dom') :| (d1:ds)) ran''), domf ++ remove x ranf)
-      other ->
-        (Expr () (Pi (((), x, dom') :| []) ran'), domf ++ remove x ranf)
+    if x `elem` ranf
+      then (Expr () (addPi x dom' ran'), domf ++ remove x ranf)
+      else (Expr () (addArrow dom' ran'), domf ++ remove x ranf)
 resugar (CLambda x body) =
-  let (body', bodyf) = resugar body
-  in
-    case body' of
-      (Expr () (Lambda (y :| ys) body'')) ->
-        (Expr () (Lambda (((), x) :| (y:ys)) body''),
-         remove x bodyf)
-      other ->
-        (Expr () (Lambda (((), x) :| []) other),
-         remove x bodyf)
+  let (Expr () body', bodyf) = resugar body
+  in (Expr () (addLambda x body'), remove x bodyf)
 resugar (CApp rator rand) =
   let (rator', ratorf) = resugar rator
       (rand', randf) = resugar rand
@@ -54,11 +64,11 @@ resugar (CApp rator rand) =
         (Expr () (App other (rand' :| [])), ratorf ++ randf)
 resugar (CSigma x a d) =
   let (a', af) = resugar a
-      (d', df) = resugar d
+      (Expr () d', df) = resugar d
   in
     if x `elem` df
-      then (Expr () (Sigma (((), x, a') :| []) d'), af ++ remove x df)
-      else (Expr () (Pair a' d'), af ++ df)
+      then (Expr () (addSigma x a' d'), af ++ remove x df)
+      else (Expr () (Pair a' (Expr () d')), af ++ df)
 resugar (CCons a d) = resugar2 Cons a d
 resugar (CCar p) = resugar1 Car p
 resugar (CCdr p) = resugar1 Cdr p
@@ -73,18 +83,10 @@ resugar (CSymm e) = resugar1 Symm e
 resugar (CIndEq tgt mot base) = resugar3 IndEq tgt mot base
 resugar (CVec elem len) = resugar2 Vec elem len
 resugar (CVecCons e es) = resugar2 VecCons e es
-resugar CVecNil = (Expr () VecNil, [])
+resugar CVecNil = resugar0 VecNil
 resugar (CVecHead es) = resugar1 VecHead es
 resugar (CVecTail es) = resugar1 VecTail es
-resugar (CIndVec len es mot base step) =
-  let (len', lenf) = resugar len
-      (es', esf) = resugar es
-      (mot', motf) = resugar mot
-      (base', basef) = resugar base
-      (step', stepf) = resugar step
-  in
-    (Expr () (IndVec len' es' mot' base' step'),
-     lenf ++ esf ++ motf ++ basef ++ stepf)
+resugar (CIndVec len es mot base step) = resugar5 IndVec len es mot base step
 resugar CU = resugar0 U
 resugar (CThe t e) = resugar2 The t e
 
