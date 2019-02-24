@@ -310,6 +310,9 @@ topLevel' = claim <|> define <|> checkSame
     define = kw "define" *> (Define <$> varName <*> expr)
     checkSame = kw "check-same" *> (CheckSame <$> expr <*> expr <*> expr)
 
+program :: Parser [Located (TopLevel Expr)]
+program = hashLang *> rep topLevel <* eof
+
 testParser :: Parser a -> String -> Either (Positioned ParseErr) a
 testParser (Parser p) input =
   let initSt = ParserState (T.pack input) (Pos 1 1)
@@ -317,3 +320,20 @@ testParser (Parser p) input =
   in case p initCtx initSt of
        Left err -> Left err
        Right (x, _) -> Right x
+
+keepParsing ::
+  FilePath ->
+  ParserState ->
+  Parser a ->
+  Either (Positioned ParseErr) (a, ParserState)
+keepParsing file st (Parser p) =
+  p (ParserContext file) st
+
+startParsing ::
+  FilePath ->
+  Text ->
+  Parser a ->
+  Either (Positioned ParseErr) (a, ParserState)
+startParsing file input p =
+  let initSt = ParserState input (Pos 1 1)
+  in keepParsing file initSt p
