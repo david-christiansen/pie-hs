@@ -97,7 +97,7 @@ mustBeAlphaEquiv :: Core -> Core -> IO ()
 mustBeAlphaEquiv c1 c2 = mustSucceed (alphaEquiv c1 c2)
 
 norm :: N.Norm a -> a
-norm act = N.runNormalize act [] None
+norm act = N.runNorm act [] None
 
 hasNorm ::
   String {- ^ The input expression -} ->
