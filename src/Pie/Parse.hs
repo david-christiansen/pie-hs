@@ -148,15 +148,20 @@ string (c:cs) =
        then failure (ExpectedChar c)
        else string cs
 
+forwardText :: Pos -> Text -> Pos
+forwardText (Pos l c) txt =
+  case T.lines txt of
+    [] -> Pos l c
+    [line] -> Pos l (c + T.length line)
+    lines -> Pos (l + length lines - 1) (T.length (last lines))
+
 spanning :: (Char -> Bool) -> Parser Text
 spanning p =
   do (matching, rest) <- T.span p . currentInput <$> get
-     case T.lines matching of
-       [] -> modify (\st -> st { currentInput = rest })
-       ls -> modify (\st -> st { currentInput = rest
-                               , currentPos = let Pos l c = currentPos st
-                                              in Pos (l + length ls - 1) (c + T.length (last ls))
-                               })
+     modify
+       (\st -> st { currentInput = rest
+                  , currentPos = forwardText (currentPos st) matching
+                  })
      return matching
 
 regex :: Text -> [Char] -> Parser Text
@@ -166,16 +171,9 @@ regex name rx =
        Nothing -> failure (Expected name)
        Just matching ->
          do let rest = T.drop (T.length matching) input
-            case T.lines matching of
-              [] -> modify (\st -> st { currentInput = rest })
-              [l] -> modify (\st -> st { currentInput = rest
-                                       , currentPos = forwardCols (T.length l) (currentPos st)
-                                       })
-              ls -> modify (\st -> st { currentInput = rest
-                                      , currentPos =
-                                          let Pos l c = currentPos st
-                                          in Pos (l + length ls - 1) (T.length (last ls))
-                                      })
+            modify (\st -> st { currentInput = rest
+                              , currentPos = forwardText (currentPos st) matching
+                              })
             return matching
   where
     theRegex = ICU.regex [] (T.pack ('^' : rx))
