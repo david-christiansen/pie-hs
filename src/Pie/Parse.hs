@@ -150,10 +150,10 @@ string (c:cs) =
 
 forwardText :: Pos -> Text -> Pos
 forwardText (Pos l c) txt =
-  case T.lines txt of
+  case T.split (== '\n') txt of
     [] -> Pos l c
     [line] -> Pos l (c + T.length line)
-    lines -> Pos (l + length lines - 1) (T.length (last lines))
+    lines -> Pos (l + length lines - 1) (1 + T.length (last lines))
 
 spanning :: (Char -> Bool) -> Parser Text
 spanning p =
