@@ -291,12 +291,16 @@ doIndVec (VAdd1 k) (VVecCons v vs) mot base step =
 -- TODO neutral cases
 
 
+baseName :: Symbol -> Value -> Symbol
+baseName def (VLambda x _) = x
+baseName def _ = def
+
 readBack :: Normal -> Norm Core
 readBack (NThe VAtom (VTick x)) = return (CTick x)
 readBack (NThe VNat  VZero) = return CZero
 readBack (NThe VNat (VAdd1 k)) = CAdd1 <$> readBack (NThe VNat k)
 readBack (NThe (VPi x dom ran) fun) =
-  do y <- fresh x
+  do y <- fresh (baseName x fun)
      let yVal = VNeu dom (NVar y)
      bodyVal <- doApply fun yVal
      bodyType <- instantiate ran x yVal

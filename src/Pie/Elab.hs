@@ -432,7 +432,7 @@ check t e =
 check' t (Lambda ((loc, x) :| xs) body) =
   case t of
     VPi y dom ran ->
-      do z <- fresh y
+      do z <- fresh x
          withCtxExtension z (Just loc) dom $
            do bodyT <- instantiate ran y (VNeu dom (NVar z))
               case xs of
