@@ -240,7 +240,7 @@ expr' = asum [ u
                 return (Located loc (NatLit (read (T.unpack i))))
     vecNil = atomic "vecnil" VecNil
     compound =
-      parensLoc (asum [ add1, indNat
+      parensLoc (asum [ add1, whichNat, iterNat, recNat, indNat
                       , lambda, pi, arrow
                       , the
                       , sigma, pairT , cons , car , cdr
@@ -265,6 +265,9 @@ expr' = asum [ u
     sigma = kw "Sigma" *> (Sigma <$> typedBinders <*> expr)
     pairT = kw "Pair" *> (Pair <$> expr <*> expr)
     cons = kw "cons" *> (Cons <$> expr <*> expr)
+    whichNat = kw "which-Nat" *> (WhichNat <$> expr <*> expr <*> expr)
+    iterNat = kw "iter-Nat" *> (IterNat <$> expr <*> expr <*> expr)
+    recNat = kw "rec-Nat" *> (RecNat <$> expr <*> expr <*> expr)
     indNat = kw "ind-Nat" *> (IndNat <$> expr <*> expr <*> expr <*> expr)
     car = kw "car" *> (Car <$> expr)
     cdr = kw "cdr" *> (Cdr <$> expr)

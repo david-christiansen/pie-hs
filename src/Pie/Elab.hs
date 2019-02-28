@@ -244,6 +244,40 @@ synth' (NatLit n)
   | otherwise =
     do loc <- currentLoc
        synth' (Add1 (Expr loc (NatLit (n - 1))))
+synth' (WhichNat tgt base step) =
+  do tgt' <- check VNat tgt
+     SThe bt base' <- synth base
+     btName <- fresh (sym "base-type")
+     k <- fresh (sym "k")
+     stepT <- evalInEnv (None :> (btName, bt)) (CPi k CNat (CVar btName))
+     step' <- check stepT step
+     bt' <- readBackType bt
+     return (SThe bt (CWhichNat tgt' bt' base' step'))
+synth' (IterNat tgt base step) =
+  do tgt' <- check VNat tgt
+     SThe bt base' <- synth base
+     btName <- fresh (sym "base-type")
+     soFar <- fresh (sym "so-far")
+     stepT <- evalInEnv
+                (None :> (btName, bt))
+                (CPi soFar (CVar btName) (CVar btName))
+     step' <- check stepT step
+     bt' <- readBackType bt
+     return (SThe bt (CIterNat tgt' bt' base' step'))
+synth' (RecNat tgt base step) =
+  do tgt' <- check VNat tgt
+     k <- fresh (sym "k")
+     SThe bt base' <- synth base
+     soFar <- fresh (sym "so-far")
+     btName <- fresh (sym "base-type")
+     stepT <- evalInEnv
+                (None :> (btName, bt))
+                (CPi k CNat
+                  (CPi soFar (CVar btName)
+                    (CVar btName)))
+     step' <- check stepT step
+     bt' <- readBackType bt
+     return (SThe bt (CRecNat tgt' bt' base' step'))
 synth' (IndNat tgt mot base step) =
   do tgt' <- check VNat tgt
      k <- fresh (sym "k")

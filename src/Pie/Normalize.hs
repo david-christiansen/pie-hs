@@ -67,6 +67,24 @@ eval (CTick x) = return (VTick x)
 eval CAtom     = return VAtom
 eval CZero     = return VZero
 eval (CAdd1 n) = VAdd1 <$> eval n
+eval (CWhichNat tgt ty base step) =
+  do tgtv <- eval tgt
+     tyv <- eval ty
+     basev <- eval base
+     stepv <- eval step
+     doWhichNat tgtv tyv basev stepv
+eval (CIterNat tgt ty base step) =
+  do tgtv <- eval tgt
+     tyv <- eval ty
+     basev <- eval base
+     stepv <- eval step
+     doIterNat tgtv tyv basev stepv
+eval (CRecNat tgt ty base step) =
+  do tgtv <- eval tgt
+     tyv <- eval ty
+     basev <- eval base
+     stepv <- eval step
+     doRecNat tgtv tyv basev stepv
 eval (CIndNat tgt mot base step) =
   do tgtv <- eval tgt
      motv <- eval mot
@@ -144,6 +162,45 @@ doCdr p@(VNeu (VSigma x aT dT) ne) =
   do a <- doCar p
      t <- instantiate dT x a
      return (VNeu t (NCdr ne))
+
+doWhichNat VZero t base step = return base
+doWhichNat (VAdd1 k) t base step = doApply step k
+doWhichNat tgt@(VNeu VNat ne) t base step =
+  do tyName <- fresh (sym "ty")
+     k <- fresh (sym "k")
+     stepTy <- withEnv (None :> (tyName, t)) $
+               eval (CPi k CNat
+                      (CVar tyName))
+     return (VNeu t (NWhichNat ne (NThe t base) (NThe stepTy step)))
+
+doIterNat VZero t base step = return base
+doIterNat (VAdd1 k) t base step =
+  do soFar <- doIterNat k t base step
+     doApply step soFar
+doIterNat tgt@(VNeu VNat ne) t base step =
+  do tyName <- fresh (sym "ty")
+     k <- fresh (sym "k")
+     stepTy <- withEnv (None :> (tyName, t)) $
+               eval (CPi k (CVar tyName)
+                      (CVar tyName))
+     return (VNeu t (NIterNat ne (NThe t base) (NThe stepTy step)))
+
+
+doRecNat VZero t base step = return base
+doRecNat (VAdd1 k) t base step =
+  do soFar <- doRecNat k t base step
+     stepk <- doApply step k
+     doApply stepk soFar
+doRecNat tgt@(VNeu VNat ne) t base step =
+  do tyName <- fresh (sym "ty")
+     k <- fresh (sym "k")
+     x <- fresh (sym "x")
+     stepTy <- withEnv (None :> (tyName, t)) $
+               eval (CPi k CNat
+                      (CPi x (CVar tyName)
+                        (CVar tyName)))
+     return (VNeu t (NRecNat ne (NThe t base) (NThe stepTy step)))
+
 
 doIndNat VZero          mot base step = return base
 doIndNat (VAdd1 k)      mot base step =
@@ -281,6 +338,21 @@ readBackType other = error (show other)
 
 readBackNeutral :: Neutral -> Norm Core
 readBackNeutral (NVar x) = return (CVar x)
+readBackNeutral (NWhichNat tgt base@(NThe t _) step) =
+  CWhichNat <$> readBackNeutral tgt
+            <*> readBackType t
+            <*> readBack base
+            <*> readBack step
+readBackNeutral (NIterNat tgt base@(NThe t _) step) =
+  CIterNat <$> readBackNeutral tgt
+            <*> readBackType t
+            <*> readBack base
+            <*> readBack step
+readBackNeutral (NRecNat tgt base@(NThe t _) step) =
+  CRecNat <$> readBackNeutral tgt
+          <*> readBackType t
+          <*> readBack base
+          <*> readBack step
 readBackNeutral (NIndNat tgt mot base step) =
   CIndNat <$> readBackNeutral tgt <*> readBack mot <*> readBack base <*> readBack step
 readBackNeutral (NApp neu arg) = CApp <$> readBackNeutral neu <*> readBack arg
@@ -302,3 +374,4 @@ readBackNeutral (NIndEq tgt mot base) =
   CIndEq <$> readBackNeutral tgt <*> readBack mot <*> readBack base
 readBackNeutral (NHead ne) = CVecHead <$> readBackNeutral ne
 readBackNeutral (NTail ne) = CVecTail <$> readBackNeutral ne
+readBackNeutral other = error (show other)

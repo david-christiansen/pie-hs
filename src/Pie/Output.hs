@@ -40,6 +40,9 @@ resugar (CAdd1 k) =
     (Expr () Zero, _) -> (Expr () (NatLit 1), [])
     (Expr () (NatLit n), _) -> (Expr () (NatLit (1 + n)), [])
     (other, free) -> (Expr () (Add1 other), free)
+resugar (CWhichNat tgt t base step) = resugar3 WhichNat tgt (CThe t base) step
+resugar (CIterNat tgt t base step) = resugar3 IterNat tgt (CThe t base) step
+resugar (CRecNat tgt t base step) = resugar3 RecNat tgt (CThe t base) step
 resugar (CIndNat tgt mot base step) = resugar4 IndNat tgt mot base step
 resugar CNat = resugar0 Nat
 resugar (CVar x) = (Expr () (Var x), [x])
@@ -127,6 +130,9 @@ pp' Atom = T.pack "Atom"
 pp' Zero = T.pack "zero"
 pp' (Add1 n) = T.pack "(add1 " <> pp n <> T.pack ")"
 pp' (NatLit n) = T.pack (show n)
+pp' (WhichNat tgt base step) = list "which-Nat" [tgt, base, step]
+pp' (IterNat tgt base step) = list "iter-Nat" [tgt, base, step]
+pp' (RecNat tgt base step) = list "rec-Nat" [tgt, base, step]
 pp' (IndNat tgt mot base step) = T.pack "(ind-Nat " <> spaced (map pp [tgt, mot, base, step]) <> T.pack ")"
 pp' Nat = T.pack "Nat"
 pp' (Var x) = symbolName x

@@ -104,6 +104,9 @@ data Expr' loc = Tick Symbol
                | Zero
                | Add1 (LocatedExpr loc)
                | NatLit Integer
+               | WhichNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | IterNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | RecNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | IndNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | Nat
                | Var Symbol
@@ -139,6 +142,9 @@ data Core = CTick Symbol
           | CAtom
           | CZero
           | CAdd1 Core
+          | CWhichNat Core Core Core Core
+          | CIterNat Core Core Core Core
+          | CRecNat Core Core Core Core
           | CIndNat Core Core Core Core
           | CNat
           | CVar Symbol
@@ -194,6 +200,9 @@ data Value = VTick Symbol
   deriving Show
 
 data Neutral = NVar Symbol
+             | NWhichNat Neutral Normal Normal
+             | NIterNat Neutral Normal Normal
+             | NRecNat Neutral Normal Normal
              | NIndNat Neutral Normal Normal Normal
              | NApp Neutral Normal
              | NCar Neutral
