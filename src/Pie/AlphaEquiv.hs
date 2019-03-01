@@ -116,6 +116,15 @@ equiv e1 e2 =
       equiv mot1 mot2 *>
       equiv base1 base2 *>
       equiv step1 step2
+    (CEither l1 r1, CEither l2 r2) ->
+      equiv l1 l2 *> equiv r1 r2
+    (CLeft l1, CLeft l2) -> equiv l1 l2
+    (CRight r1, CRight r2) -> equiv r1 r2
+    (CIndEither tgt1 mot1 left1 right1, CIndEither tgt2 mot2 left2 right2) ->
+      equiv tgt1 tgt2 *>
+      equiv mot1 mot2 *>
+      equiv left1 left2 *>
+      equiv right1 right2
     (CThe t1 e1, CThe t2 e2) ->
       equiv t1 t2 *> equiv e1 e2
     (CU, CU) ->

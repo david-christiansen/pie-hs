@@ -213,6 +213,8 @@ isType' (Eq t from to) =
      tV <- eval t'
      CEq t' <$> check tV from <*> check tV to
 isType' (Vec t len) = CVec <$> isType t <*> check VNat len
+isType' (List elem) = CList <$> isType elem
+isType' (Either l r) = CEither <$> isType l <*> isType r
 isType' other = check' VU other
 
 
@@ -468,6 +470,38 @@ synth' (VecTail es) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
+synth' (Either l r) =
+  do l' <- check VU l
+     r' <- check VU r
+     return (SThe VU (CEither l' r'))
+synth' (IndEither tgt mot l r) =
+  do SThe tgtT tgt' <- synth tgt
+     case tgtT of
+       VEither lt rt ->
+         do motT <- evalInEnv (None :> (sym "L", lt) :> (sym "R", rt))
+                      (CPi (sym "x") (CEither (CVar (sym "L")) (CVar (sym "R")))
+                        CU)
+            mot' <- check motT mot
+            motv <- eval mot'
+            lmt <- evalInEnv (None :> (sym "L", lt) :> (sym "mot", motv))
+                     (CPi (sym "l") (CVar (sym "L"))
+                       (CApp (CVar (sym "mot")) (CLeft (CVar (sym "l")))))
+            l' <- check lmt l
+            rmt <- evalInEnv (None :> (sym "R", rt) :> (sym "mot", motv))
+                     (CPi (sym "r") (CVar (sym "R"))
+                       (CApp (CVar (sym "mot")) (CRight (CVar (sym "r")))))
+            r' <- check rmt r
+            tgtv <- eval tgt'
+            ty <- evalInEnv (None :> (sym "tgt", tgtv) :> (sym "mot", motv))
+                    (CApp (CVar (sym "mot")) (CVar (sym "tgt")))
+            return (SThe ty (CIndEither tgt' mot' l' r'))
+
+       other ->
+         do t <- readBackType other
+            failure [ MText (T.pack "Not Either:")
+                    , MVal (C t)
+                    ]
+
 synth' other =
   do loc <- currentLoc
      failure [ MText (T.pack "Can't synth")
@@ -558,6 +592,20 @@ check' t VecNil =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not a Vec type"), MVal (C t')]
+check' t (EitherLeft l) =
+  case t of
+    VEither lt _ ->
+      CLeft <$> check lt l
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not Either"), MVal (C t')]
+check' t (EitherRight r) =
+  case t of
+    VEither _ rt ->
+      CRight <$> check rt r
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not Either"), MVal (C t')]
 
 check' t other =
   do SThe t' other' <- synth' other

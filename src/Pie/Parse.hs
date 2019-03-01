@@ -249,6 +249,7 @@ expr' = asum [ u
                       , eq, same, replace, trans, cong, symm, indEq
                       , list, listCons, recList, indList
                       , vec, vecCons, vecHead, vecTail, indVec
+                      , either, left, right, indEither
                       ] <|> app)
 
     add1 = kw "add1" *> (Add1 <$> expr)
@@ -308,6 +309,14 @@ expr' = asum [ u
     vecTail = kw "tail" *> (VecTail <$> expr)
 
     indVec = kw "ind-Vec" *> (IndVec <$> expr <*> expr <*> expr <*> expr <*> expr)
+
+    either = kw "Either" *> (Either <$> expr <*> expr)
+
+    left = kw "left" *> (EitherLeft <$> expr)
+
+    right = kw "right" *> (EitherRight <$> expr)
+
+    indEither = kw "ind-Either" *> (IndEither <$> expr <*> expr <*> expr <*> expr)
 
     app = App <$> expr <*> rep1 expr
 

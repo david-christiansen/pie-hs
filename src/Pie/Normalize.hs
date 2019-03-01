@@ -157,6 +157,15 @@ eval (CIndVec k es mot base step) =
      basev <- eval base
      stepv <- eval step
      doIndVec kv esv motv basev stepv
+eval (CEither l r) = VEither <$> eval l <*> eval r
+eval (CLeft l) = VLeft <$> eval l
+eval (CRight r) = VRight <$> eval r
+eval (CIndEither tgt mot left right) =
+  do tgtv <- eval tgt
+     motv <- eval mot
+     leftv <- eval left
+     rightv <- eval right
+     doIndEither tgtv motv leftv rightv
 eval CU = return VU
 eval (CThe _ e) = eval e
 
@@ -343,6 +352,19 @@ doIndVec (VAdd1 k) (VVecCons v vs) mot base step =
      doApply step3 soFar
 -- TODO neutral cases
 
+doIndEither (VLeft v) mot left right = doApply left v
+doIndEither (VRight v) mot left right = doApply right v
+doIndEither tgt@(VNeu (VEither l r) ne) mot left right =
+  do motT <- withEnv (None :> (sym "L", l) :> (sym "R", r)) $
+               eval (CPi (sym "e") (CEither (CVar (sym "L")) (CVar (sym "R"))) CU)
+     leftT <- withEnv (None :> (sym "L", l) :> (sym "mot", mot)) $
+                eval (CPi (sym "l") (CVar (sym "L"))
+                       (CApp (CVar (sym "mot")) (CLeft (CVar (sym "l")))))
+     rightT <- withEnv (None :> (sym "R", r) :> (sym "mot", mot)) $
+                 eval (CPi (sym "r") (CVar (sym "R"))
+                        (CApp (CVar (sym "mot")) (CLeft (CVar (sym "r")))))
+     ty <- doApply mot tgt
+     return (VNeu ty (NIndEither ne (NThe motT mot) (NThe leftT left) (NThe rightT right)))
 
 baseName :: Symbol -> Value -> Symbol
 baseName def (VLambda x _) = x
@@ -373,6 +395,8 @@ readBack (NThe (VList t) (VListCons a d)) =
 readBack (NThe (VVec _ _) VVecNil) = return CVecNil
 readBack (NThe (VVec elem (VAdd1 len)) (VVecCons v vs)) =
   CVecCons <$> readBack (NThe elem v) <*> readBack (NThe (VVec elem len) vs)
+readBack (NThe (VEither lt _) (VLeft l)) = CLeft <$> readBack (NThe lt l)
+readBack (NThe (VEither _ rt) (VRight r)) = CRight <$> readBack (NThe rt r)
 readBack (NThe VU t) = readBackType t
 readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
 readBack other = error (show other)
@@ -394,6 +418,8 @@ readBackType (VEq t from to) =
 readBackType (VList elem) = CList <$> readBackType elem
 readBackType (VVec elem len) =
   CVec <$> readBackType elem <*> readBack (NThe VNat len)
+readBackType (VEither l r) =
+  CEither <$> readBackType l <*> readBackType r
 readBackType VU = return CU
 readBackType (VNeu VU ne) = readBackNeutral ne
 readBackType other = error (show other)
@@ -446,4 +472,9 @@ readBackNeutral (NIndList tgt mot base step) =
            <*> readBack step
 readBackNeutral (NHead ne) = CVecHead <$> readBackNeutral ne
 readBackNeutral (NTail ne) = CVecTail <$> readBackNeutral ne
+readBackNeutral (NIndEither ne mot l r) =
+  CIndEither <$> readBackNeutral ne
+             <*> readBack mot
+             <*> readBack l
+             <*> readBack r
 readBackNeutral other = error (show other)

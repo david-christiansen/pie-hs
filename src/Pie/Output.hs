@@ -95,6 +95,10 @@ resugar CVecNil = resugar0 VecNil
 resugar (CVecHead es) = resugar1 VecHead es
 resugar (CVecTail es) = resugar1 VecTail es
 resugar (CIndVec len es mot base step) = resugar5 IndVec len es mot base step
+resugar (CEither l r) = resugar2 Either l r
+resugar (CLeft l) = resugar1 EitherLeft l
+resugar (CRight l) = resugar1 EitherRight l
+resugar (CIndEither tgt mot l r) = resugar4 IndEither tgt mot l r
 resugar CU = resugar0 U
 resugar (CThe t e) = resugar2 The t e
 
@@ -183,6 +187,10 @@ pp' (VecCons e es) = list "vec::" [e, es]
 pp' (VecHead es) = list "head" [es]
 pp' (VecTail es) = list "tail" [es]
 pp' (IndVec len tgt mot base step) = list "ind-Vec" [len, tgt, mot, base, step]
+pp' (Either l r) = list "Either" [l, r]
+pp' (EitherLeft l) = list "left" [l]
+pp' (EitherRight r) = list "right" [r]
+pp' (IndEither tgt mot l r) = list "ind-Either" [tgt, mot, l, r]
 pp' U = T.pack "U"
 pp' (The t e) = T.pack "(the " <> pp t <> T.pack " " <> pp e <> T.pack ")"
 
