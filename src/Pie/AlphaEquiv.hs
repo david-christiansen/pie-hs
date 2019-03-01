@@ -51,6 +51,12 @@ equiv e1 e2 =
       yes
     (CAdd1 j, CAdd1 k) ->
       equiv j k
+    (CWhichNat tgt1 bt1 base1 step1, CWhichNat tgt2 bt2 base2 step2) ->
+      equiv tgt1 tgt2 *> equiv bt1 bt2 *> equiv base1 base2 *> equiv step1 step2
+    (CIterNat tgt1 bt1 base1 step1, CIterNat tgt2 bt2 base2 step2) ->
+      equiv tgt1 tgt2 *> equiv bt1 bt2 *> equiv base1 base2 *> equiv step1 step2
+    (CRecNat tgt1 bt1 base1 step1, CRecNat tgt2 bt2 base2 step2) ->
+      equiv tgt1 tgt2 *> equiv bt1 bt2 *> equiv base1 base2 *> equiv step1 step2
     (CIndNat tgt1 mot1 base1 step1, CIndNat tgt2 mot2 base2 step2) ->
       equiv tgt1 tgt2 *>
       equiv mot1 mot2 *>
@@ -77,8 +83,6 @@ equiv e1 e2 =
     (CCdr p1, CCdr p2) -> equiv p1 p2
     (CTrivial, CTrivial) -> yes
     (CSole, CSole) -> yes
-    (CU, CU) ->
-      yes
     (CEq a f1 t1, CEq b f2 t2) ->
       equiv a b *> equiv f1 f2 *> equiv t1 t2
     (CSame e1, CSame e2) ->
@@ -93,8 +97,29 @@ equiv e1 e2 =
       equiv p1 p2
     (CIndEq tgt1 mot1 base1, CIndEq tgt2 mot2 base2) ->
       equiv tgt1 tgt2 *> equiv mot1 mot2 *> equiv base1 base2
+    (CList e1, CList e2) -> equiv e1 e2
+    (CListNil, CListNil) -> yes
+    (CListCons e1 es1, CListCons e2 es2) -> equiv e1 e2 *> equiv es1 es2
+    (CRecList tgt1 bt1 base1 step1, CRecList tgt2 bt2 base2 step2) ->
+      equiv tgt1 tgt2 *> equiv bt1 bt2 *> equiv base1 base2 *> equiv step1 step2
+    (CIndList tgt1 mot1 base1 step1, CIndList tgt2 mot2 base2 step2) ->
+      equiv tgt1 tgt2 *> equiv mot1 mot2 *> equiv base1 base2 *> equiv step1 step2
+    (CVec e1 len1, CVec e2 len2) -> equiv e1 e2 *> equiv len1 len2
+    (CVecNil, CVecNil) -> yes
+    (CVecCons e1 es1, CVecCons e2 es2) ->
+      equiv e1 e2 *> equiv es1 es2
+    (CVecHead es1, CVecHead es2) -> equiv es1 es2
+    (CVecTail es1, CVecTail es2) -> equiv es1 es2
+    (CIndVec len1 es1 mot1 base1 step1, CIndVec len2 es2 mot2 base2 step2) ->
+      equiv len1 len2 *>
+      equiv es1 es2 *>
+      equiv mot1 mot2 *>
+      equiv base1 base2 *>
+      equiv step1 step2
     (CThe t1 e1, CThe t2 e2) ->
       equiv t1 t2 *> equiv e1 e2
+    (CU, CU) ->
+      yes
     _ ->
       no
 

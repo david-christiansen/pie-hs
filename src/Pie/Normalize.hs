@@ -130,6 +130,21 @@ eval (CIndEq tgt mot base) =
      motv <- eval mot
      basev <- eval base
      doIndEq tgtv motv basev
+eval (CList elem) = VList <$> eval elem
+eval CListNil = return VListNil
+eval (CListCons e es) = VListCons <$> eval e <*> eval es
+eval (CRecList tgt bt base step) =
+  do tgtv <- eval tgt
+     btv <- eval bt
+     basev <- eval base
+     stepv <- eval step
+     doRecList tgtv btv basev stepv
+eval (CIndList tgt mot base step) =
+  do tgtv <- eval tgt
+     motv <- eval mot
+     basev <- eval base
+     stepv <- eval step
+     doIndList tgtv motv basev stepv
 eval (CVec elem len) = VVec <$> eval elem <*> eval len
 eval CVecNil = return VVecNil
 eval (CVecCons e es) = VVecCons <$> eval e <*> eval es
@@ -153,6 +168,11 @@ doApply (VNeu (VPi x a b) f) arg =
   VNeu <$> (instantiate b x arg)
        <*> pure (NApp f (NThe a arg))
 doApply other arg = panic ("Not a function: " ++ show other)
+
+doApplyMany fun [] = return fun
+doApplyMany fun (v:vs) =
+  do fun' <- doApply fun v
+     doApplyMany fun' vs
 
 doCar (VCons a _) = pure a
 doCar (VNeu (VSigma x aT dT) ne) = pure (VNeu aT (NCar ne))
@@ -219,6 +239,39 @@ doIndNat tgt@(VNeu VNat ne) mot base step =
                       (CPi soFar (CApp (CVar motName) (CVar k))
                         (CApp (CVar motName) (CAdd1 (CVar k)))))
      return (VNeu t (NIndNat ne (NThe motTy mot) (NThe baseTy base) (NThe stepTy step)))
+
+doRecList VListNil bt base step = return base
+doRecList (VListCons v vs) bt base step =
+  do soFar <- doRecList vs bt base step
+     doApplyMany step [v, vs, soFar]
+doRecList tgt@(VNeu (VList t) ne) bt base step =
+  do stepT <- withEnv (None :> (sym "E", t) :> (sym "bt", bt)) $
+                eval (CPi (sym "e") (CVar (sym "E"))
+                       (CPi (sym "es") (CList (CVar (sym "E")))
+                         (CPi (sym "so-far") (CVar (sym "bt"))
+                           (CVar (sym "bt")))))
+     return (VNeu bt (NRecList ne (NThe bt base) (NThe stepT step)))
+
+doIndList VListNil mot base step = return base
+doIndList (VListCons v vs) mot base step =
+  do soFar <- doIndList vs mot base step
+     doApplyMany step [v, vs, soFar]
+doIndList tgt@(VNeu (VList t) ne) mot base step =
+  do motT <- withEnv (None :> (sym "E", t)) $
+               eval (CPi (sym "es") (CList (CVar (sym "E")))
+                       CU)
+     baseT <- withEnv (None :> (sym "mot", mot)) $
+                eval (CApp (CVar (sym "mot")) CListNil)
+     stepT <- withEnv (None :> (sym "E", t) :> (sym "mot", mot)) $
+                eval (CPi (sym "e") (CVar (sym "E"))
+                       (CPi (sym "es") (CList (CVar (sym "E")))
+                         (CPi (sym "so-far") (CApp (CVar (sym "mot")) (CVar (sym "es")))
+                           (CApp (CVar (sym "mot"))
+                                 (CListCons (CVar (sym "e"))
+                                            (CVar (sym "es")))))))
+     ty <- doApply mot tgt
+     return (VNeu ty (NIndList ne (NThe motT mot) (NThe baseT base) (NThe stepT step)))
+
 
 doReplace :: Value -> Value -> Value -> Norm Value
 doReplace (VSame v) mot base = return base
@@ -314,6 +367,9 @@ readBack (NThe (VSigma x aT dT) p) =
      return (CCons a d)
 readBack (NThe VTrivial _) = return CSole
 readBack (NThe (VEq ty _ _) (VSame v)) = CSame <$> readBack (NThe ty v)
+readBack (NThe (VList _) VListNil) = return CListNil
+readBack (NThe (VList t) (VListCons a d)) =
+  CListCons <$> readBack (NThe t a) <*> readBack (NThe (VList t) d)
 readBack (NThe (VVec _ _) VVecNil) = return CVecNil
 readBack (NThe (VVec elem (VAdd1 len)) (VVecCons v vs)) =
   CVecCons <$> readBack (NThe elem v) <*> readBack (NThe (VVec elem len) vs)
@@ -335,9 +391,11 @@ readBackType (VSigma x a d) =
 readBackType VTrivial = return CTrivial
 readBackType (VEq t from to) =
   CEq <$> readBackType t <*> readBack (NThe t from) <*> readBack (NThe t to)
+readBackType (VList elem) = CList <$> readBackType elem
 readBackType (VVec elem len) =
   CVec <$> readBackType elem <*> readBack (NThe VNat len)
 readBackType VU = return CU
+readBackType (VNeu VU ne) = readBackNeutral ne
 readBackType other = error (show other)
 
 readBackNeutral :: Neutral -> Norm Core
@@ -376,6 +434,16 @@ readBackNeutral (NCong ne fun@(NThe (VPi _ a (Closure e c)) _)) =
 readBackNeutral (NSymm ne) = CSymm <$> readBackNeutral ne
 readBackNeutral (NIndEq tgt mot base) =
   CIndEq <$> readBackNeutral tgt <*> readBack mot <*> readBack base
+readBackNeutral (NRecList ne base@(NThe bt _) step) =
+  CRecList <$> readBackNeutral ne
+           <*> readBackType bt
+           <*> readBack base
+           <*> readBack step
+readBackNeutral (NIndList tgt mot base step) =
+  CIndList <$> readBackNeutral tgt
+           <*> readBack mot
+           <*> readBack base
+           <*> readBack step
 readBackNeutral (NHead ne) = CVecHead <$> readBackNeutral ne
 readBackNeutral (NTail ne) = CVecTail <$> readBackNeutral ne
 readBackNeutral other = error (show other)

@@ -223,6 +223,7 @@ expr' = asum [ u
              , triv, sole
              , tick, atom
              , zero, natLit
+             , nil
              , vecNil
              , fmap Var <$> varName
              ] <|> compound
@@ -234,6 +235,7 @@ expr' = asum [ u
     zero = atomic "zero" Zero
     triv = atomic "Trivial" Trivial
     sole = atomic "sole" Sole
+    nil = atomic "nil" ListNil
     tick = do Located loc x <- token (litChar '\'' *> ident)  -- TODO separate atom name from var name - atom name has fewer possibilities!
               return (Located loc (Tick (Symbol x)))
     natLit = do Located loc i <- token (regex (T.pack "natural number literal") "[0-9]+")
@@ -245,6 +247,7 @@ expr' = asum [ u
                       , the
                       , sigma, pairT , cons , car , cdr
                       , eq, same, replace, trans, cong, symm, indEq
+                      , list, listCons, recList, indList
                       , vec, vecCons, vecHead, vecTail, indVec
                       ] <|> app)
 
@@ -287,6 +290,14 @@ expr' = asum [ u
     symm = kw "symm" *> (Symm <$> expr)
 
     indEq = kw "ind-=" *> (IndEq <$> expr <*> expr <*> expr)
+
+    list = kw "List" *> (List <$> expr)
+
+    listCons = kw "::" *> (ListCons <$> expr <*> expr)
+
+    recList = kw "rec-List" *> (RecList <$> expr <*> expr <*> expr)
+
+    indList = kw "ind-List" *> (IndList <$> expr <*> expr <*> expr <*> expr)
 
     vec = kw "Vec" *> (Vec <$> expr <*> expr)
 

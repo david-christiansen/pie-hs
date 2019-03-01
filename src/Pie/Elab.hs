@@ -386,6 +386,58 @@ synth' (App rator (rand1 :| rands)) =
     checkArgs _ other _ =
       do t <- readBackType other
          failure [MText (T.pack "Not a Π type: "), MVal (C t)]
+synth' (List elem) =
+  do elem' <- check VU elem
+     return (SThe VU (CList elem'))
+synth' (ListCons e es) =
+  do SThe t e' <- synth e
+     es' <- check (VList t) es
+     return (SThe (VList t) (CListCons e' es'))
+synth' (RecList tgt base step) =
+  do SThe lstT tgt' <- synth tgt
+     case lstT of
+       VList elem ->
+         do (SThe bt base') <- synth base
+            stepT <- evalInEnv
+                       (None :> (sym "E", elem) :> (sym "base-type", bt))
+                       (CPi (sym "e") (CVar (sym "E"))
+                         (CPi (sym "es") (CList (CVar (sym "E")))
+                           (CPi (sym "so-far") (CVar (sym "base-type"))
+                             (CVar (sym "base-type")))))
+            step' <- check stepT step
+            bt' <- readBackType bt
+            return (SThe bt (CRecList tgt' bt' base' step'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not a List type: "), MVal (C t)]
+synth' (IndList tgt mot base step) =
+  do SThe lstT tgt' <- synth tgt
+     case lstT of
+       VList elem ->
+         do motT <- evalInEnv (None :> (sym "E", elem))
+                       (CPi (sym "es") (CList (CVar (sym "E"))) CU)
+            mot' <- check motT mot
+            motV <- eval mot'
+            baseT <- evalInEnv
+                       (None :> (sym "mot", motV))
+                       (CApp (CVar (sym "mot")) CListNil)
+            base' <- check baseT base
+            stepT <- evalInEnv
+                       (None :> (sym "E", elem) :> (sym "mot", motV))
+                       (CPi (sym "e") (CVar (sym "E"))
+                         (CPi (sym "es") (CList (CVar (sym "E")))
+                           (CPi (sym "so-far") (CApp (CVar (sym "mot"))
+                                                     (CVar (sym "es")))
+                             (CApp (CVar (sym "mot"))
+                                   (CListCons (CVar (sym "e"))
+                                              (CVar (sym "es")))))))
+            step' <- check stepT step
+            tgtV <- eval tgt'
+            ty <- doApply motV tgtV
+            return (SThe ty (CIndList tgt' mot' base' step'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not a List type: "), MVal (C t)]
 synth' (VecHead es) =
   do SThe esT es' <- synth es
      case esT of
@@ -470,6 +522,12 @@ check' t (Same e) =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not an equality type"), MVal (C t')]
+check' t ListNil =
+  case t of
+    VList elem -> return CListNil
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not a Vec type"), MVal (C t')]
 check' t (VecCons e es) =
   case t of
     VVec elem len ->

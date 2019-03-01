@@ -128,6 +128,11 @@ data Expr' loc = Tick Symbol
                | Cong (LocatedExpr loc) (LocatedExpr loc)
                | Symm (LocatedExpr loc)
                | IndEq (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | List (LocatedExpr loc)
+               | ListNil
+               | ListCons (LocatedExpr loc) (LocatedExpr loc)
+               | RecList (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | IndList (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | Vec (LocatedExpr loc) (LocatedExpr loc)
                | VecNil
                | VecCons (LocatedExpr loc) (LocatedExpr loc)
@@ -164,6 +169,11 @@ data Core = CTick Symbol
           | CCong Core Core Core
           | CSymm Core
           | CIndEq Core Core Core
+          | CList Core
+          | CListNil
+          | CListCons Core Core
+          | CRecList Core Core Core Core
+          | CIndList Core Core Core Core
           | CVec Core Core
           | CVecNil
           | CVecCons Core Core
@@ -192,6 +202,9 @@ data Value = VTick Symbol
            | VSole
            | VEq Value Value Value
            | VSame Value
+           | VList Value
+           | VListNil
+           | VListCons Value Value
            | VVec Value Value
            | VVecCons Value Value
            | VVecNil
@@ -214,6 +227,8 @@ data Neutral = NVar Symbol
              | NCong Neutral Normal
              | NSymm Neutral
              | NIndEq Neutral Normal Normal
+             | NRecList Neutral Normal Normal
+             | NIndList Neutral Normal Normal Normal
              | NHead Neutral
              | NTail Neutral
              | NIndVec1 Neutral Normal Normal Normal Normal
