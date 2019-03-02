@@ -342,6 +342,12 @@ indEqMotTy ty from =
      withEnv (None :> (tN, ty) :> (frN, from)) $
        eval (CPi toN (CVar tN) (CPi p (CEq (CVar tN) (CVar frN) (CVar toN)) CU))
 
+indVecMotTy elem =
+  withEnv (None :> (sym "E", elem)) $
+    eval (CPi (sym "len") CNat
+           (CPi (sym "es") (CVec (CVar (sym "E")) (CVar (sym "len")))
+             CU))
+
 doHead (VVecCons e _) = return e
 doHead (VNeu (VVec elem _) ne) = return (VNeu elem (NHead ne))
 
@@ -351,11 +357,40 @@ doTail (VNeu (VVec elem (VAdd1 k)) ne) = return (VNeu (VVec elem k) (NTail ne))
 doIndVec VZero VVecNil mot base step = return base
 doIndVec (VAdd1 k) (VVecCons v vs) mot base step =
   do soFar <- doIndVec k vs mot base step
-     step1 <- doApply step k
-     step2 <- doApply step1 v
-     step3 <- doApply step2 vs
-     doApply step3 soFar
--- TODO neutral cases
+     doApplyMany step [k, v, vs, soFar]
+doIndVec len@(VNeu VNat l) es@(VNeu (VVec elem _) ne) mot base step =
+  do ty <- doApplyMany mot [len, es]
+     motT <- indVecMotTy elem
+     baseT <- doApplyMany mot [VZero, VVecNil]
+     stepT <- withEnv (None :> (sym "E", elem) :> (sym "mot", mot)) $
+                eval (CPi (sym "k") CNat
+                       (CPi (sym "e") (CVar (sym "E"))
+                         (CPi (sym "es") (CVec (CVar (sym "E")) (CVar (sym "k")))
+                           (CPi (sym "so-far") (CApp (CApp (CVar (sym "mot"))
+                                                           (CVar (sym "k")))
+                                                     (CVar (sym "es")))
+                             (CApp (CApp (CVar (sym "mot"))
+                                         (CAdd1 (CVar (sym "k"))))
+                                    (CVecCons (CVar (sym "e"))
+                                              (CVar (sym "es"))))))))
+     return (VNeu ty (NIndVec12 l ne (NThe motT mot) (NThe baseT base) (NThe stepT step)))
+doIndVec len es@(VNeu (VVec elem _) ne) mot base step =
+  do ty <- doApplyMany mot [len, es]
+     motT <- indVecMotTy elem
+     baseT <- doApplyMany mot [VZero, VVecNil]
+     stepT <- withEnv (None :> (sym "E", elem) :> (sym "mot", mot)) $
+                eval (CPi (sym "k") CNat
+                       (CPi (sym "e") (CVar (sym "E"))
+                         (CPi (sym "es") (CVec (CVar (sym "E")) (CVar (sym "k")))
+                           (CPi (sym "so-far") (CApp (CApp (CVar (sym "mot"))
+                                                           (CVar (sym "k")))
+                                                     (CVar (sym "es")))
+                             (CApp (CApp (CVar (sym "mot"))
+                                         (CAdd1 (CVar (sym "k"))))
+                                    (CVecCons (CVar (sym "e"))
+                                              (CVar (sym "es"))))))))
+     return (VNeu ty (NIndVec2 (NThe VNat len) ne (NThe motT mot) (NThe baseT base) (NThe stepT step)))
+
 
 doIndEither (VLeft v) mot left right = doApply left v
 doIndEither (VRight v) mot left right = doApply right v
@@ -482,6 +517,18 @@ readBackNeutral (NIndList tgt mot base step) =
            <*> readBack step
 readBackNeutral (NHead ne) = CVecHead <$> readBackNeutral ne
 readBackNeutral (NTail ne) = CVecTail <$> readBackNeutral ne
+readBackNeutral (NIndVec12 neLen neEs mot base step) =
+  CIndVec <$> readBackNeutral neLen
+          <*> readBackNeutral neEs
+          <*> readBack mot
+          <*> readBack base
+          <*> readBack step
+readBackNeutral (NIndVec2 len neEs mot base step) =
+  CIndVec <$> readBack len
+          <*> readBackNeutral neEs
+          <*> readBack mot
+          <*> readBack base
+          <*> readBack step
 readBackNeutral (NIndEither ne mot l r) =
   CIndEither <$> readBackNeutral ne
              <*> readBack mot

@@ -247,9 +247,8 @@ data Neutral = NVar Symbol
              | NIndList Neutral Normal Normal Normal
              | NHead Neutral
              | NTail Neutral
-             | NIndVec1 Neutral Normal Normal Normal Normal
-             | NIndVec2 Normal Neutral Normal Normal Normal
              | NIndVec12 Neutral Neutral Normal Normal Normal
+             | NIndVec2 Normal Neutral Normal Normal Normal
              | NIndEither Neutral Normal Normal Normal
              | NIndAbsurd Neutral Normal
   deriving Show

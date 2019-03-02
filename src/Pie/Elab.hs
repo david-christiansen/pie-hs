@@ -87,9 +87,9 @@ currentLoc = Elab (\_ loc _ -> ([], pure loc))
 
 applyRenaming :: Symbol -> Elab Symbol
 applyRenaming x =
-  Elab (\ _ _ ren ->
+  Elab (\ _ loc ren ->
           case lookup x ren of
-            Nothing -> panic ("Can't rename " ++ show x ++ " in " ++ show ren)
+            Nothing -> ([], Left (ElabErr (Located loc [MText (T.pack ("Unknown variable " ++ show x ++ " in " ++ show ren))])))
             Just y -> ([], pure y))
 
 rename :: Symbol -> Symbol -> Elab a -> Elab a
@@ -133,6 +133,9 @@ doCar = runNorm . Norm.doCar
 
 doApply :: Value -> Value -> Elab Value
 doApply fun arg = runNorm (Norm.doApply fun arg)
+
+doApplyMany :: Value -> [Value] -> Elab Value
+doApplyMany fun args = runNorm (Norm.doApplyMany fun args)
 
 
 close :: Core -> Elab (Closure Value)
@@ -326,13 +329,14 @@ synth' (Arrow dom (t:|ts)) =
 synth' (Pi ((loc, x, dom) :| doms) ran) =
   do dom' <- check VU dom
      domVal <- eval dom'
-     ran' <- withCtxExtension x (Just loc) domVal $
+     x' <- fresh x
+     ran' <- rename x x' $ withCtxExtension x' (Just loc) domVal $
              case doms of
                [] ->
                  check VU ran
                (y : ds) ->
                  check' VU (Pi (y :| ds) ran)
-     return (SThe VU (CPi x dom' ran'))
+     return (SThe VU (CPi x' dom' ran'))
 synth' (Sigma ((loc, x, a) :| as) d) =
   do a' <- check VU a
      aVal <- eval a'
@@ -369,6 +373,12 @@ synth' (Cdr p) =
             failure [MText (T.pack "Not a Σ: "), MVal (C ty)]
 synth' Trivial = return (SThe VU CTrivial)
 synth' Sole = return (SThe VTrivial CSole)
+synth' (Eq ty from to) =
+  do ty' <- check VU ty
+     tv <- eval ty'
+     from' <- check tv from
+     to' <- check tv to
+     return (SThe VU (CEq ty' from' to'))
 synth' (The ty e) =
   do ty' <- isType ty
      tv <- eval ty'
@@ -468,6 +478,40 @@ synth' (VecTail es) =
                 failure [ MText (T.pack "Expected a Vec with non-zero length, got a Vec with")
                         , MVal (C len')
                         , MText (T.pack "length.")]
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
+synth' (IndVec len es mot base step) =
+  do len' <- check VNat len
+     lenv <- eval len'
+     SThe esT es' <- synth es
+     case esT of
+       VVec elem len'' ->
+         do same VNat lenv len''
+            motT <- evalInEnv (None :> (sym "E", elem))
+                      (CPi (sym "k") CNat
+                        (CPi (sym "es") (CVec (CVar (sym "E")) (CVar (sym "k")))
+                          CU))
+            mot' <- check motT mot
+            motv <- eval mot'
+            baseT <- doApplyMany motv [VZero, VVecNil]
+            base' <- check baseT base
+            stepT <- evalInEnv (None :> (sym "E", elem) :> (sym "mot", motv))
+                       (CPi (sym "k") CNat
+                         (CPi (sym "e") (CVar (sym "E"))
+                           (CPi (sym "es") (CVec (CVar (sym "E")) (CVar (sym "k")))
+                             (CPi (sym "so-far") (CApp (CApp (CVar (sym "mot"))
+                                                             (CVar (sym "k")))
+                                                       (CVar (sym "es")))
+                               (CApp (CApp (CVar (sym "mot"))
+                                           (CAdd1 (CVar (sym "k"))))
+                                      (CVecCons (CVar (sym "e"))
+                                                (CVar (sym "es"))))))))
+            step' <- check stepT step
+            lenv <- eval len'
+            esv <- eval es'
+            ty <- doApplyMany motv [lenv, esv]
+            return (SThe ty (CIndVec len' es' mot' base' step'))
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
