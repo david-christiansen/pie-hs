@@ -166,6 +166,11 @@ eval (CIndEither tgt mot left right) =
      leftv <- eval left
      rightv <- eval right
      doIndEither tgtv motv leftv rightv
+eval CAbsurd = return VAbsurd
+eval (CIndAbsurd tgt mot) =
+  do tgtv <- eval tgt
+     motv <- eval mot
+     doIndAbsurd tgtv motv
 eval CU = return VU
 eval (CThe _ e) = eval e
 
@@ -366,6 +371,9 @@ doIndEither tgt@(VNeu (VEither l r) ne) mot left right =
      ty <- doApply mot tgt
      return (VNeu ty (NIndEither ne (NThe motT mot) (NThe leftT left) (NThe rightT right)))
 
+doIndAbsurd (VNeu VAbsurd ne) mot =
+  return (VNeu mot (NIndAbsurd ne (NThe VU mot)))
+
 baseName :: Symbol -> Value -> Symbol
 baseName def (VLambda x _) = x
 baseName def _ = def
@@ -397,6 +405,7 @@ readBack (NThe (VVec elem (VAdd1 len)) (VVecCons v vs)) =
   CVecCons <$> readBack (NThe elem v) <*> readBack (NThe (VVec elem len) vs)
 readBack (NThe (VEither lt _) (VLeft l)) = CLeft <$> readBack (NThe lt l)
 readBack (NThe (VEither _ rt) (VRight r)) = CRight <$> readBack (NThe rt r)
+readBack (NThe VAbsurd (VNeu _ ne)) = CThe CAbsurd <$> readBackNeutral ne
 readBack (NThe VU t) = readBackType t
 readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
 readBack other = error (show other)
@@ -420,6 +429,7 @@ readBackType (VVec elem len) =
   CVec <$> readBackType elem <*> readBack (NThe VNat len)
 readBackType (VEither l r) =
   CEither <$> readBackType l <*> readBackType r
+readBackType VAbsurd = return CAbsurd
 readBackType VU = return CU
 readBackType (VNeu VU ne) = readBackNeutral ne
 readBackType other = error (show other)
@@ -477,4 +487,7 @@ readBackNeutral (NIndEither ne mot l r) =
              <*> readBack mot
              <*> readBack l
              <*> readBack r
+readBackNeutral (NIndAbsurd ne mot) =
+  CIndAbsurd <$> (CThe CAbsurd <$> readBackNeutral ne)
+             <*> readBack mot
 readBackNeutral other = error (show other)

@@ -215,6 +215,7 @@ isType' (Eq t from to) =
 isType' (Vec t len) = CVec <$> isType t <*> check VNat len
 isType' (List elem) = CList <$> isType elem
 isType' (Either l r) = CEither <$> isType l <*> isType r
+isType' Absurd = return CAbsurd
 isType' other = check' VU other
 
 
@@ -501,7 +502,11 @@ synth' (IndEither tgt mot l r) =
             failure [ MText (T.pack "Not Either:")
                     , MVal (C t)
                     ]
-
+synth' (IndAbsurd tgt mot) =
+  do tgt' <- check VAbsurd tgt
+     mot' <- check VU mot
+     motv <- eval mot'
+     return (SThe motv (CIndAbsurd tgt' mot'))
 synth' other =
   do loc <- currentLoc
      failure [ MText (T.pack "Can't synth")

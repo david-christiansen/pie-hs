@@ -225,6 +225,7 @@ expr' = asum [ u
              , zero, natLit
              , nil
              , vecNil
+             , absurd
              , fmap Var <$> varName
              ] <|> compound
   where
@@ -236,6 +237,7 @@ expr' = asum [ u
     triv = atomic "Trivial" Trivial
     sole = atomic "sole" Sole
     nil = atomic "nil" ListNil
+    absurd = atomic "Absurd" Absurd
     tick = do Located loc x <- token (litChar '\'' *> ident)  -- TODO separate atom name from var name - atom name has fewer possibilities!
               return (Located loc (Tick (Symbol x)))
     natLit = do Located loc i <- token (regex (T.pack "natural number literal") "[0-9]+")
@@ -250,6 +252,7 @@ expr' = asum [ u
                       , list, listCons, recList, indList
                       , vec, vecCons, vecHead, vecTail, indVec
                       , either, left, right, indEither
+                      , indAbsurd
                       ] <|> app)
 
     add1 = kw "add1" *> (Add1 <$> expr)
@@ -317,6 +320,8 @@ expr' = asum [ u
     right = kw "right" *> (EitherRight <$> expr)
 
     indEither = kw "ind-Either" *> (IndEither <$> expr <*> expr <*> expr <*> expr)
+
+    indAbsurd = kw "ind-Absurd" *> (IndAbsurd <$> expr <*> expr)
 
     app = App <$> expr <*> rep1 expr
 

@@ -143,6 +143,8 @@ data Expr' loc = Tick Symbol
                | EitherLeft (LocatedExpr loc)
                | EitherRight (LocatedExpr loc)
                | IndEither (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Absurd
+               | IndAbsurd (LocatedExpr loc) (LocatedExpr loc)
                | U
                | The (LocatedExpr loc) (LocatedExpr loc)
   deriving (Eq, Show)
@@ -188,6 +190,8 @@ data Core = CTick Symbol
           | CLeft Core
           | CRight Core
           | CIndEither Core Core Core Core
+          | CAbsurd
+          | CIndAbsurd Core Core
           | CU
           | CThe Core Core
   deriving (Eq, Show)
@@ -219,6 +223,7 @@ data Value = VTick Symbol
            | VEither Value Value
            | VLeft Value
            | VRight Value
+           | VAbsurd
            | VU
            | VNeu Value Neutral
   deriving Show
@@ -246,6 +251,7 @@ data Neutral = NVar Symbol
              | NIndVec2 Normal Neutral Normal Normal Normal
              | NIndVec12 Neutral Neutral Normal Normal Normal
              | NIndEither Neutral Normal Normal Normal
+             | NIndAbsurd Neutral Normal
   deriving Show
 
 data Normal = NThe { normType :: Value, normVal :: Value }

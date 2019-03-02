@@ -99,6 +99,8 @@ resugar (CEither l r) = resugar2 Either l r
 resugar (CLeft l) = resugar1 EitherLeft l
 resugar (CRight l) = resugar1 EitherRight l
 resugar (CIndEither tgt mot l r) = resugar4 IndEither tgt mot l r
+resugar CAbsurd = resugar0 Absurd
+resugar (CIndAbsurd tgt mot) = resugar2 IndAbsurd tgt mot
 resugar CU = resugar0 U
 resugar (CThe t e) = resugar2 The t e
 
@@ -191,6 +193,8 @@ pp' (Either l r) = list "Either" [l, r]
 pp' (EitherLeft l) = list "left" [l]
 pp' (EitherRight r) = list "right" [r]
 pp' (IndEither tgt mot l r) = list "ind-Either" [tgt, mot, l, r]
+pp' Absurd = T.pack "Absurd"
+pp' (IndAbsurd tgt mot) = list "ind-Absurd" [tgt, mot]
 pp' U = T.pack "U"
 pp' (The t e) = T.pack "(the " <> pp t <> T.pack " " <> pp e <> T.pack ")"
 

@@ -125,6 +125,10 @@ equiv e1 e2 =
       equiv mot1 mot2 *>
       equiv left1 left2 *>
       equiv right1 right2
+    (CAbsurd, CAbsurd) -> yes
+    (CIndAbsurd tgt1 mot1, CIndAbsurd tgt2 mot2) ->
+      equiv tgt1 tgt2 *> equiv mot1 mot2
+    (CThe CAbsurd _, CThe CAbsurd _) -> yes -- η for Absurd
     (CThe t1 e1, CThe t2 e2) ->
       equiv t1 t2 *> equiv e1 e2
     (CU, CU) ->
