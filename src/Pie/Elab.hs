@@ -451,6 +451,8 @@ synth' (IndList tgt mot base step) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Not a List type: "), MVal (C t)]
+synth' (Vec elem len) =
+  SThe VU <$> (CVec <$> check VU elem <*> check VNat len)
 synth' (VecHead es) =
   do SThe esT es' <- synth es
      case esT of

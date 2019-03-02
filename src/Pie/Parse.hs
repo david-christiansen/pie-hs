@@ -181,8 +181,14 @@ regex name rx =
 hashLang :: Parser ()
 hashLang = regex (T.pack "language identification") "#lang pie" *> eatSpaces
 
+
+-- | The identifier rules from R6RS Scheme
 ident :: Parser Text
-ident = regex (T.pack "identifier") "[\\p{Letter}-][\\p{Letter}0-9₀₁₂₃₄₅₆₇₈₉-]*"
+ident = regex (T.pack "identifier")
+          ("\\A(?:(?:" ++ initial ++ "(?:" ++ subsequent ++ ")*+)|\\+|\\.\\.\\.)")
+
+initial = "[\\p{L}\\p{Lu}\\p{Ll}\\p{Lt}\\p{Lm}\\p{Lo}\\p{Mn}\\p{Nl}\\p{No}\\p{Pd}\\p{Pc}\\p{Po}\\p{Sc}\\p{Sm}\\p{Sk}\\p{So}\\p{Co}!$%&*/:<=>?_~^]"
+subsequent = initial ++ "|(?:[0-9₀₁₂₃₄₅₆₇₈₉]|[\\p{Nd}\\p{Mc}\\p{Me}]|\\+|\\.|@)"
 
 token :: Parser a -> Parser (Located a)
 token p = located p <* eatSpaces
@@ -194,7 +200,8 @@ varName =
        then failure (Expected (T.pack "valid name"))
        else return x
 
-kw k = token (string k)
+kw k = token $ do x <- ident
+                  if T.pack k == x then return () else empty
 
 eatSpaces :: Parser ()
 eatSpaces = spanning isSpace *> pure ()
@@ -218,15 +225,16 @@ expr = do Located loc e <- expr'
           return (Expr loc e)
 
 expr' :: Parser (Located (Expr' Loc))
-expr' = asum [ u
+expr' = asum [ tick
+             , fmap Var <$> varName
+             , u
              , nat
              , triv, sole
-             , tick, atom
+             , atom
              , zero, natLit
              , nil
              , vecNil
              , absurd
-             , fmap Var <$> varName
              ] <|> compound
   where
     atomic k v = atLoc (kw k) v
@@ -257,19 +265,19 @@ expr' = asum [ u
 
     add1 = kw "add1" *> (Add1 <$> expr)
 
-    lambda = kw "lambda" *> (Lambda <$> argList <*> expr)
+    lambda = (kw "lambda" <|> kw "λ") *> (Lambda <$> argList <*> expr)
       where argList = parens (rep1 (do Located loc x <- varName
                                        return (loc, x)))
 
-    pi = kw "Pi" *> (Pi <$> typedBinders <*> expr)
+    pi = (kw "Pi" <|> kw "Π") *> (Pi <$> typedBinders <*> expr)
 
-    arrow = kw "->" *> (Arrow <$> expr <*> rep1 expr)
+    arrow = (kw "->" <|> kw "→") *> (Arrow <$> expr <*> rep1 expr)
 
     typedBinders = parens (rep1 (parens (do Located loc x <- varName
                                             ty <- expr
                                             return (loc, x, ty))))
 
-    sigma = kw "Sigma" *> (Sigma <$> typedBinders <*> expr)
+    sigma = (kw "Sigma" <|> kw "Σ") *> (Sigma <$> typedBinders <*> expr)
     pairT = kw "Pair" *> (Pair <$> expr <*> expr)
     cons = kw "cons" *> (Cons <$> expr <*> expr)
     whichNat = kw "which-Nat" *> (WhichNat <$> expr <*> expr <*> expr)

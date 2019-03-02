@@ -34,7 +34,7 @@ pieKeywords =
     "List", "::", "nil", "rec-List", "ind-List",
     "Absurd", "ind-Absurd",
     "=", "same", "replace", "trans", "cong", "symm", "ind-=",
-    "Vec", "vecnil ","vec::", "head", "tail", "ind-Vec",
+    "Vec", "vecnil","vec::", "head", "tail", "ind-Vec",
     "Either", "left", "right", "ind-Either",
     "TODO", "the"]
 
@@ -200,6 +200,7 @@ data TopLevel a = Claim (Located Symbol) a
                 | Define (Located Symbol) a
                 | CheckSame a a a
                 | Example a
+  deriving Show
 
 data Value = VTick Symbol
            | VAtom
