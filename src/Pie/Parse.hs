@@ -131,6 +131,7 @@ rep p = ((:) <$> p <*> (rep p)) <|> pure []
 rep1 :: Parser a -> Parser (NonEmpty a)
 rep1 p = (:|) <$> p <*> rep p
 
+rep_ p = rep p *> pure ()
 
 located :: Parser a -> Parser (Located a)
 located p =
@@ -179,7 +180,7 @@ regex name rx =
     theRegex = ICU.regex [] (T.pack ('^' : rx))
 
 hashLang :: Parser ()
-hashLang = regex (T.pack "language identification") "#lang pie" *> eatSpaces
+hashLang = regex (T.pack "language identification") "#lang pie" *> spacing
 
 
 -- | The identifier rules from R6RS Scheme
@@ -191,7 +192,7 @@ initial = "[\\p{L}\\p{Lu}\\p{Ll}\\p{Lt}\\p{Lm}\\p{Lo}\\p{Mn}\\p{Nl}\\p{No}\\p{Pd
 subsequent = initial ++ "|(?:[0-9₀₁₂₃₄₅₆₇₈₉]|[\\p{Nd}\\p{Mc}\\p{Me}]|\\+|\\.|@)"
 
 token :: Parser a -> Parser (Located a)
-token p = located p <* eatSpaces
+token p = located p <* spacing
 
 varName =
   token $
@@ -203,8 +204,25 @@ varName =
 kw k = token $ do x <- ident
                   if T.pack k == x then return () else empty
 
-eatSpaces :: Parser ()
-eatSpaces = spanning isSpace *> pure ()
+spacing :: Parser ()
+spacing =
+  rep_ $
+    litChar ' '  <|>
+    litChar '\r' <|>
+    litChar '\n' <|>
+    litChar '\t' <|>
+    lineComment  <|>
+    exprComment
+
+
+lineComment :: Parser ()
+lineComment = regex (T.pack "line comment") ";[^\n]*\n" *> pure ()
+
+exprComment :: Parser ()
+exprComment = ignore (token (string "#;") *> sexpr)
+  where
+    sexpr = token (ignore (parens (many sexpr)) <|> ignore ident <|> ignore natLit)
+    ignore = fmap (const ())
 
 parens :: Parser a -> Parser a
 parens p = token (litChar '(') *> p <* token (litChar ')')
@@ -214,6 +232,10 @@ parensLoc p = do Located open _ <- token (litChar '(')
                  res <- p
                  Located close _ <- token (litChar ')')
                  return (Located (spanLocs open close) res)
+
+natLit = do Located loc i <- token (regex (T.pack "natural number literal") "[0-9]+")
+            return (Located loc (NatLit (read (T.unpack i))))
+
 
 pair x y = (x, y)
 
@@ -248,8 +270,6 @@ expr' = asum [ tick
     absurd = atomic "Absurd" Absurd
     tick = do Located loc x <- token (litChar '\'' *> ident)  -- TODO separate atom name from var name - atom name has fewer possibilities!
               return (Located loc (Tick (Symbol x)))
-    natLit = do Located loc i <- token (regex (T.pack "natural number literal") "[0-9]+")
-                return (Located loc (NatLit (read (T.unpack i))))
     vecNil = atomic "vecnil" VecNil
     compound =
       parensLoc (asum [ add1, whichNat, iterNat, recNat, indNat
