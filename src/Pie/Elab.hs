@@ -340,7 +340,9 @@ synth' (Pi ((loc, x, dom) :| doms) ran) =
 synth' (Sigma ((loc, x, a) :| as) d) =
   do a' <- check VU a
      aVal <- eval a'
+     x' <- fresh x
      d' <- withCtxExtension x (Just loc) aVal $
+             rename x x' $
              case as of
                [] ->
                  check VU d
@@ -379,6 +381,50 @@ synth' (Eq ty from to) =
      from' <- check tv from
      to' <- check tv to
      return (SThe VU (CEq ty' from' to'))
+synth' (Cong tgt fun) =
+  do SThe tgtT tgt' <- synth tgt
+     SThe funT fun' <- synth fun
+     case tgtT of
+       VEq ty from to ->
+         case funT of
+           VPi x dom ran ->
+             do sameType ty dom
+                ran' <- instantiate ran x from
+                funV <- eval fun'
+                newFrom <- doApply funV from
+                newTo <- doApply funV to
+                ty' <- readBackType ran'
+                return (SThe (VEq ran' newFrom newTo) (CCong tgt' ty' fun'))
+           other ->
+             do t <- readBackType other
+                failure [MText (T.pack "Not an -> type: "), MVal (C t)]
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not an = type: "), MVal (C t)]
+synth' (Replace tgt mot base) =
+  do SThe tgtT tgt' <- synth tgt
+     case tgtT of
+       VEq a from to ->
+         do motT <- evalInEnv (None :> (sym "A", a))
+                      (CPi (sym "x") (CVar (sym "A"))
+                        CU)
+            mot' <- check motT mot
+            motv <- eval mot'
+            baseT <- doApply motv from
+            base' <- check baseT base
+            ty <- doApply motv to
+            return (SThe ty (CReplace tgt' mot' base'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not an = type: "), MVal (C t)]
+synth' (Symm tgt) =
+  do SThe tgtT tgt' <- synth tgt
+     case tgtT of
+       VEq a from to ->
+         return (SThe (VEq a to from) (CSymm tgt'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not an = type: "), MVal (C t)]
 synth' (The ty e) =
   do ty' <- isType ty
      tv <- eval ty'
@@ -548,6 +594,7 @@ synth' (IndEither tgt mot l r) =
             failure [ MText (T.pack "Not Either:")
                     , MVal (C t)
                     ]
+synth' Absurd = return (SThe VU CAbsurd)
 synth' (IndAbsurd tgt mot) =
   do tgt' <- check VAbsurd tgt
      mot' <- check VU mot
