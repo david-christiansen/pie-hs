@@ -69,7 +69,7 @@ processFile f =
             dumpInfo info
             case res of
               Left err ->
-                do T.putStrLn (printErr err)
+                do T.putStrLn (printErr input err)
                    exitFailure
               Right _ ->
                 exitSuccess
@@ -85,15 +85,17 @@ repl st =
      l <- getLine
      if l == ":dump"
        then print st *> repl st
-       else do let e = testParser topLevel l
+       else do let e = testParser (topLevel <* eof) l
                case e of
-                 Left err -> putStrLn (show err)
+                 Left err ->
+                   T.putStrLn (printParseErr (T.pack l) err) *>
+                   repl st
                  Right parsed@(Located loc _) ->
                    do let (info, res) = runTopElab (top parsed) st loc
                       dumpInfo info
                       case res of
                         Left err ->
-                          do T.putStrLn (printErr err)
+                          do T.putStrLn (printErr (T.pack l) err)
                              repl st
                         Right ((), st') ->
                           repl st'

@@ -6,6 +6,7 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Pie.Parse (ParseErr(..))
 import Pie.Types
 
 remove x [] = []
@@ -219,10 +220,73 @@ dumpLocElabInfo :: Located ElabInfo -> Text
 dumpLocElabInfo (Located loc info) =
   printLoc loc <> T.pack ": " <> printInfo info
 
-printErr :: ElabErr -> Text
-printErr (ElabErr (Located loc msg)) =
+printErr :: Text -> ElabErr -> Text
+printErr input (ElabErr (Located loc msg)) =
     printLoc loc <> T.pack ": " <>
+    highlightLoc input loc <>
     mconcat (intersperse (T.pack " ") [showPart part | part <- msg])
   where
     showPart (MText txt) = txt
     showPart (MVal c) = pp (fst (resugar c))
+
+highlightLoc :: Text -> Loc -> Text
+highlightLoc input (Loc fn (Pos l1 c1) (Pos l2 c2)) =
+  if l1 == l2
+    then
+      case findLine l1 input of
+        Nothing -> T.empty
+        Just line ->
+          T.pack "\n  " <> line <>
+          T.pack "\n  " <> spaces c1 <> caret <> dashes (c2 - c1 - 1) <> caret <> nl
+    else
+      case pair <$> findLine l1 input <*> findLine l2 input of
+        Nothing -> T.empty
+        Just (line1, line2) ->
+          T.pack "\n  " <> spaces (T.length label1 + c1) <> vee <> dashes (max (T.length line1) (T.length line2) - 2) <>
+          T.pack "\n  " <> label1 <> line1 <>
+          T.pack (if l2 - l1 == 1 then "" else "\n" ++ replicate (T.length label1) ' ' ++  "  ...") <>
+          T.pack "\n  " <> label2 <> line2 <>
+          T.pack "\n  " <> spaces (T.length label2 + 1) <> dashes (c2 - 1) <> caret <> nl
+  where
+    (label1, label2) =
+      let l1str = show l1
+          l2str = show l2
+      in
+        (T.pack (replicate (length l1str - length l2str) ' ' ++ l1str ++ ": "),
+         T.pack (replicate (length l2str - length l1str) ' ' ++ l2str ++ ": "))
+    pair x y = (x, y)
+    caret = T.pack "^"
+    vee = T.pack "v"
+    nl = T.pack "\n"
+    spaces n = T.replicate (n - 1) (T.pack " ")
+    dashes n = T.replicate (n - 1) (T.pack "-")
+    lineID l = T.pack fn
+
+highlightPos :: Text -> Pos -> Text
+highlightPos input (Pos l c) =
+  case findLine l input of
+    Nothing -> T.empty
+    Just line ->
+      T.pack "\n  " <> line <>
+      T.pack "\n  " <> T.replicate (c - 1) (T.pack "-") <> T.pack "^\n"
+
+findLine :: Int -> Text -> Maybe Text
+findLine n input = find' n (T.lines input)
+  where
+    find' n (l:ls)
+      | n <= 1 = Just l
+      | otherwise = find' (n - 1) ls
+    find' _ [] = Nothing
+
+
+printParseErr :: Text -> Positioned ParseErr -> Text
+printParseErr input (Positioned pos@(Pos l c) e) =
+  mconcat
+  [ T.pack ("Parse error at " ++ show l ++ ":" ++ show c ++ ":")
+  , highlightPos input pos
+  , case e of
+      GenericParseErr -> T.empty
+      ExpectedChar c -> T.pack "Expected character " <> T.pack (show c)
+      Expected what -> T.pack "Expected " <> what
+      EOF -> T.pack "end of input"
+  ]

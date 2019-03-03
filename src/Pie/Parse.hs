@@ -61,8 +61,15 @@ instance Alternative Parser where
   Parser p1 <|> Parser p2 =
     Parser (\ctx st ->
               case p1 ctx st of
-                Left _ -> p2 ctx st
+                Left e1 ->
+                  case p2 ctx st of
+                    Left e2 ->
+                      Left (furthest e1 e2)
+                    Right ans -> Right ans
                 Right ans -> Right ans)
+    where
+      furthest e1@(Positioned p1 _) e2@(Positioned p2 _) =
+        if p1 > p2 then e1 else e2
 
 instance Monad Parser where
   return = pure
@@ -77,7 +84,7 @@ eof :: Parser ()
 eof = Parser (\ _ st ->
                 if T.null (currentInput st)
                   then Right ((), st)
-                  else Left (Positioned (currentPos st) (Expected (T.pack "EOF"))))
+                  else Left (Positioned (currentPos st) EOF))
 
 failure :: ParseErr -> Parser a
 failure e = Parser (\ _ st -> Left (Positioned (currentPos st) e))

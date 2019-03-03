@@ -84,7 +84,7 @@ applyRenaming :: Symbol -> Elab Symbol
 applyRenaming x =
   Elab (\ _ loc ren ->
           case lookup x ren of
-            Nothing -> ([], Left (ElabErr (Located loc [MText (T.pack ("Unknown variable " ++ show x ++ " in " ++ show ren))])))
+            Nothing -> ([], Left (ElabErr (Located loc [MText (T.pack ("Unknown variable")), MVal (CVar x), MText (T.pack ("in " ++ show ren))])))
             Just y -> ([], pure y))
 
 rename :: Symbol -> Symbol -> Elab a -> Elab a
