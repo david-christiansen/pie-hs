@@ -275,3 +275,6 @@ data ElabInfo = ExprHasType Core
               | ExampleOut Core
   deriving Eq
 
+
+newtype ElabErr = ElabErr (Located [MessagePart Core])
+  deriving Show

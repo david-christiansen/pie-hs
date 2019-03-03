@@ -60,7 +60,7 @@ processFile f =
   do input <- T.readFile f
      case startParsing f input program of
        Left err ->
-         do print err
+         do putStrLn (show err)
             exitFailure
        Right (parsed, _) ->
          do let st = TopState None []
@@ -69,7 +69,7 @@ processFile f =
             dumpInfo info
             case res of
               Left err ->
-                do print err
+                do T.putStrLn (printErr err)
                    exitFailure
               Right _ ->
                 exitSuccess
@@ -87,13 +87,13 @@ repl st =
        then print st *> repl st
        else do let e = testParser topLevel l
                case e of
-                 Left err -> print err
+                 Left err -> putStrLn (show err)
                  Right parsed@(Located loc _) ->
                    do let (info, res) = runTopElab (top parsed) st loc
                       dumpInfo info
                       case res of
                         Left err ->
-                          do print err
+                          do T.putStrLn (printErr err)
                              repl st
                         Right ((), st') ->
                           repl st'

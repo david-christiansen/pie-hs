@@ -218,3 +218,11 @@ printInfo (ExampleOut c) =
 dumpLocElabInfo :: Located ElabInfo -> Text
 dumpLocElabInfo (Located loc info) =
   printLoc loc <> T.pack ": " <> printInfo info
+
+printErr :: ElabErr -> Text
+printErr (ElabErr (Located loc msg)) =
+    printLoc loc <> T.pack ": " <>
+    mconcat (intersperse (T.pack " ") [showPart part | part <- msg])
+  where
+    showPart (MText txt) = txt
+    showPart (MVal c) = pp (fst (resugar c))

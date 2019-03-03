@@ -28,11 +28,6 @@ names :: Ctx a -> [Symbol]
 names None = []
 names (ctx :> (x, _)) = x : names ctx
 
-data E = C Core | E Expr
-  deriving Show
-
-newtype ElabErr = ElabErr (Located [MessagePart E])
-  deriving Show
 
 
 newtype Elab a =
@@ -76,7 +71,7 @@ fresh x =
   do used <- names <$> getCtx
      return (freshen used x)
 
-failure :: [MessagePart E] -> Elab a
+failure :: [MessagePart Core] -> Elab a
 failure msg = Elab (\ ctx loc _ -> ([], Left (ElabErr (Located loc msg))))
 
 getCtx :: Elab (Ctx Value)
@@ -310,7 +305,7 @@ synth' (Var x) =
   where
     findVar x' None =
       do loc <- currentLoc
-         failure [MText (T.pack "Unknown variable"), MVal (E (Expr loc (Var x)))]
+         failure [MText (T.pack "Unknown variable"), MVal (CVar x)]
     findVar x' (ctx' :> (y, info))
       | x' == y =
          pure (SThe (entryType info) (CVar x'))
@@ -362,7 +357,7 @@ synth' (Car p) =
          return (SThe aT (CCar p'))
        other ->
          do ty <- readBackType other
-            failure [MText (T.pack "Not a Σ: "), MVal (C ty)]
+            failure [MText (T.pack "Not a Σ: "), MVal ty]
 synth' (Cdr p) =
   do SThe ty p' <- synth p
      case ty of
@@ -372,7 +367,7 @@ synth' (Cdr p) =
             return (SThe dV (CCar p'))
        other ->
          do ty <- readBackType other
-            failure [MText (T.pack "Not a Σ: "), MVal (C ty)]
+            failure [MText (T.pack "Not a Σ: "), MVal ty]
 synth' Trivial = return (SThe VU CTrivial)
 synth' Sole = return (SThe VTrivial CSole)
 synth' (Eq ty from to) =
@@ -397,10 +392,10 @@ synth' (Cong tgt fun) =
                 return (SThe (VEq ran' newFrom newTo) (CCong tgt' ty' fun'))
            other ->
              do t <- readBackType other
-                failure [MText (T.pack "Not an -> type: "), MVal (C t)]
+                failure [MText (T.pack "Not an -> type: "), MVal t]
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Not an = type: "), MVal (C t)]
+            failure [MText (T.pack "Not an = type: "), MVal t]
 synth' (Replace tgt mot base) =
   do SThe tgtT tgt' <- synth tgt
      case tgtT of
@@ -416,7 +411,7 @@ synth' (Replace tgt mot base) =
             return (SThe ty (CReplace tgt' mot' base'))
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Not an = type: "), MVal (C t)]
+            failure [MText (T.pack "Not an = type: "), MVal t]
 synth' (Symm tgt) =
   do SThe tgtT tgt' <- synth tgt
      case tgtT of
@@ -424,7 +419,7 @@ synth' (Symm tgt) =
          return (SThe (VEq a to from) (CSymm tgt'))
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Not an = type: "), MVal (C t)]
+            failure [MText (T.pack "Not an = type: "), MVal t]
 synth' (The ty e) =
   do ty' <- isType ty
      tv <- eval ty'
@@ -444,7 +439,7 @@ synth' (App rator (rand1 :| rands)) =
            (r:rs) -> checkArgs (CApp fun rand1') exprTy (r :| rs)
     checkArgs _ other _ =
       do t <- readBackType other
-         failure [MText (T.pack "Not a Π type: "), MVal (C t)]
+         failure [MText (T.pack "Not a Π type: "), MVal t]
 synth' (List elem) =
   do elem' <- check VU elem
      return (SThe VU (CList elem'))
@@ -468,7 +463,7 @@ synth' (RecList tgt base step) =
             return (SThe bt (CRecList tgt' bt' base' step'))
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Not a List type: "), MVal (C t)]
+            failure [MText (T.pack "Not a List type: "), MVal t]
 synth' (IndList tgt mot base step) =
   do SThe lstT tgt' <- synth tgt
      case lstT of
@@ -496,7 +491,7 @@ synth' (IndList tgt mot base step) =
             return (SThe ty (CIndList tgt' mot' base' step'))
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Not a List type: "), MVal (C t)]
+            failure [MText (T.pack "Not a List type: "), MVal t]
 synth' (Vec elem len) =
   SThe VU <$> (CVec <$> check VU elem <*> check VNat len)
 synth' (VecHead es) =
@@ -509,11 +504,11 @@ synth' (VecHead es) =
            other ->
              do len' <- readBack (NThe VNat len)
                 failure [ MText (T.pack "Expected a Vec with non-zero length, got a Vec with")
-                        , MVal (C len')
+                        , MVal len'
                         , MText (T.pack "length.")]
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
+            failure [MText (T.pack "Expected a Vec, got a"), MVal t]
 synth' (VecTail es) =
   do SThe esT es' <- synth es
      case esT of
@@ -524,11 +519,11 @@ synth' (VecTail es) =
            other ->
              do len' <- readBack (NThe VNat len)
                 failure [ MText (T.pack "Expected a Vec with non-zero length, got a Vec with")
-                        , MVal (C len')
+                        , MVal len'
                         , MText (T.pack "length.")]
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
+            failure [MText (T.pack "Expected a Vec, got a"), MVal t]
 synth' (IndVec len es mot base step) =
   do len' <- check VNat len
      lenv <- eval len'
@@ -562,7 +557,7 @@ synth' (IndVec len es mot base step) =
             return (SThe ty (CIndVec len' es' mot' base' step'))
        other ->
          do t <- readBackType other
-            failure [MText (T.pack "Expected a Vec, got a"), MVal (C t)]
+            failure [MText (T.pack "Expected a Vec, got a"), MVal t]
 synth' (Either l r) =
   do l' <- check VU l
      r' <- check VU r
@@ -592,7 +587,7 @@ synth' (IndEither tgt mot l r) =
        other ->
          do t <- readBackType other
             failure [ MText (T.pack "Not Either:")
-                    , MVal (C t)
+                    , MVal t
                     ]
 synth' Absurd = return (SThe VU CAbsurd)
 synth' (IndAbsurd tgt mot) =
@@ -603,7 +598,7 @@ synth' (IndAbsurd tgt mot) =
 synth' other =
   do loc <- currentLoc
      failure [ MText (T.pack "Can't synth")
-             , MVal (E (Expr loc other))
+             , MText (T.pack (show other)) -- TODO better representation
              ]
 
 check :: Value -> Expr -> Elab Core
@@ -630,7 +625,7 @@ check' t (Lambda ((loc, x) :| xs) body) =
                      return (CLambda z body')
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not a function type"), MVal (C t')]
+         failure [MText (T.pack "Not a function type"), MVal t']
 check' t (Cons a d) =
   case t of
     VSigma x aT dT ->
@@ -641,7 +636,7 @@ check' t (Cons a d) =
          return (CCons a' d')
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not a pair type"), MVal (C t')]
+         failure [MText (T.pack "Not a pair type"), MVal t']
 check' t (Same e) =
   case t of
     VEq ty from to ->
@@ -653,13 +648,13 @@ check' t (Same e) =
 
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not an equality type"), MVal (C t')]
+         failure [MText (T.pack "Not an equality type"), MVal t']
 check' t ListNil =
   case t of
     VList elem -> return CListNil
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not a Vec type"), MVal (C t')]
+         failure [MText (T.pack "Not a Vec type"), MVal t']
 check' t (VecCons e es) =
   case t of
     VVec elem len ->
@@ -669,12 +664,12 @@ check' t (VecCons e es) =
         otherLen ->
           do len' <- readBack (NThe VNat otherLen)
              failure [ MText (T.pack "Expected a non-zero length, got a Vec type with")
-                     , MVal (C len')
+                     , MVal len'
                      , MText (T.pack "length.")]
 
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not a Vec type"), MVal (C t')]
+         failure [MText (T.pack "Not a Vec type"), MVal t']
 check' t VecNil =
   case t of
     VVec elem len ->
@@ -684,26 +679,26 @@ check' t VecNil =
         otherLen ->
           do len' <- readBack (NThe VNat otherLen)
              failure [ MText (T.pack "Expected zero length in Vec, got a")
-                     , MVal (C len')
+                     , MVal len'
                      , MText (T.pack "length.")]
 
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not a Vec type"), MVal (C t')]
+         failure [MText (T.pack "Not a Vec type"), MVal t']
 check' t (EitherLeft l) =
   case t of
     VEither lt _ ->
       CLeft <$> check lt l
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not Either"), MVal (C t')]
+         failure [MText (T.pack "Not Either"), MVal t']
 check' t (EitherRight r) =
   case t of
     VEither _ rt ->
       CRight <$> check rt r
     other ->
       do t' <- readBackType other
-         failure [MText (T.pack "Not Either"), MVal (C t')]
+         failure [MText (T.pack "Not Either"), MVal t']
 
 check' t other =
   do SThe t' other' <- synth' other
@@ -717,11 +712,11 @@ same ty v1 v2 =
        Left reason ->
          do t <- readBackType ty
          -- TODO include specific reason as well
-            failure [ MVal (C c1)
+            failure [ MVal c1
                     , MText (T.pack "is not the same")
-                    , MVal (C t)
+                    , MVal t
                     , MText (T.pack "as")
-                    , MVal (C c2)
+                    , MVal c2
                     ]
        Right _ -> pure ()
 
@@ -731,8 +726,8 @@ sameType v1 v2 =
      case alphaEquiv c1 c2 of
        Left reason ->
          -- TODO include specific reason as well
-         failure [ MVal (C c1)
+         failure [ MVal c1
                  , MText (T.pack "is not the same type as")
-                 , MVal (C c2)
+                 , MVal c2
                  ]
        Right _ -> pure ()

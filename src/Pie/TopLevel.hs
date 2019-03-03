@@ -2,7 +2,7 @@ module Pie.TopLevel where
 
 import qualified Data.Text as T
 
-import Pie.Elab (Ctx, ElabErr(..), CtxEntry(..), Elab)
+import Pie.Elab (Ctx, CtxEntry(..), Elab)
 import qualified Pie.Elab as E
 import Pie.Fresh
 import Pie.Normalize (Norm)
