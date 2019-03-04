@@ -149,6 +149,7 @@ data Expr' loc = Tick Symbol
                | IndAbsurd (LocatedExpr loc) (LocatedExpr loc)
                | U
                | The (LocatedExpr loc) (LocatedExpr loc)
+               | TODO
   deriving (Eq, Show)
 
 data Core = CTick Symbol
@@ -196,6 +197,7 @@ data Core = CTick Symbol
           | CIndAbsurd Core Core
           | CU
           | CThe Core Core
+          | CTODO Loc Core
   deriving (Eq, Show)
 
 data TopLevel a = Claim (Located Symbol) a
@@ -254,6 +256,7 @@ data Neutral = NVar Symbol
              | NIndVec2 Normal Neutral Normal Normal Normal
              | NIndEither Neutral Normal Normal Normal
              | NIndAbsurd Neutral Normal
+             | NTODO Loc Value
   deriving Show
 
 data Normal = NThe { normType :: Value, normVal :: Value }
@@ -275,6 +278,7 @@ data ElabInfo = ExprHasType Core
               | ClaimAt Loc
               | BoundAt Loc
               | ExampleOut Core
+              | FoundTODO (Bwd (Symbol, Maybe Loc, Core)) Core
   deriving Eq
 
 

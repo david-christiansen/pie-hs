@@ -266,6 +266,7 @@ expr' = asum [ tick
              , nil
              , vecNil
              , absurd
+             , todo
              ] <|> compound
   where
     atomic k v = atLoc (kw k) v
@@ -280,6 +281,7 @@ expr' = asum [ tick
     tick = do Located loc x <- token (litChar '\'' *> ident)  -- TODO separate atom name from var name - atom name has fewer possibilities!
               return (Located loc (Tick (Symbol x)))
     vecNil = atomic "vecnil" VecNil
+    todo = atomic "TODO" TODO
     compound =
       parensLoc (asum [ add1, whichNat, iterNat, recNat, indNat
                       , lambda, pi, arrow

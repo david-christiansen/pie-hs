@@ -106,6 +106,7 @@ resugar CAbsurd = resugar0 Absurd
 resugar (CIndAbsurd tgt mot) = resugar2 IndAbsurd tgt mot
 resugar CU = resugar0 U
 resugar (CThe t e) = resugar2 The t e
+resugar (CTODO _ _) = resugar0 TODO
 
 resugar0 f =
   (Expr () f, [])
@@ -200,6 +201,7 @@ pp' Absurd = T.pack "Absurd"
 pp' (IndAbsurd tgt mot) = list "ind-Absurd" [tgt, mot]
 pp' U = T.pack "U"
 pp' (The t e) = T.pack "(the " <> pp t <> T.pack " " <> pp e <> T.pack ")"
+pp' TODO = T.pack "TODO"
 
 spaced ss = mconcat (intersperse (T.pack " ") ss)
 
@@ -217,6 +219,36 @@ printInfo (BoundAt loc) =
   T.pack "Bound at " <> printLoc loc
 printInfo (ExampleOut c) =
   pp (fst (resugar c))
+printInfo (FoundTODO ctx ty) =
+  let ctx' = printTODOCtx ctx
+      ty'  = pp (fst (resugar ty))
+      line = T.replicate (2 + maxLineLength (ctx' <> nl <> ty')) (T.pack "-")
+  in T.pack "Found TODO:" <> indent ctx' <> line <> nl <> indent ty'
+
+  where
+    nl :: Text
+    nl = T.singleton '\n'
+    indent :: Text -> Text
+    indent txt = T.unlines [T.pack " " <> line | line <- T.lines txt]
+    maxLineLength :: Text -> Int
+    maxLineLength txt =
+      foldr max 0 [T.length line | line <- T.lines txt]
+
+printTODOCtx :: Bwd (Symbol, Maybe Loc, Core) -> Text
+printTODOCtx ctx =
+  let nameWidth = foldr max 0 (map T.length (getNames ctx))
+  in T.pack "\n" <> T.unlines [showLine nameWidth x t | (x, _, t) <- toList ctx []]
+  where
+    getNames None = []
+    getNames (c :> (x, _, _)) = symbolName x : getNames c
+
+    toList None ys = ys
+    toList (xs :> x) ys = toList xs (x:ys)
+
+    showLine w x t =
+      padTo w (symbolName x) <> T.pack " : " <> pp (fst (resugar t))
+
+    padTo w txt = T.replicate (w - T.length txt) (T.singleton ' ') <> txt
 
 dumpLocElabInfo :: Located ElabInfo -> Text
 dumpLocElabInfo (Located loc info) =

@@ -173,6 +173,9 @@ eval (CIndAbsurd tgt mot) =
      doIndAbsurd tgtv motv
 eval CU = return VU
 eval (CThe _ e) = eval e
+eval (CTODO loc ty) =
+  do tv <- eval ty
+     return (VNeu tv (NTODO loc tv))
 
 
 doApply :: Value -> Value -> Norm Value
@@ -537,4 +540,5 @@ readBackNeutral (NIndEither ne mot l r) =
 readBackNeutral (NIndAbsurd ne mot) =
   CIndAbsurd <$> (CThe CAbsurd <$> readBackNeutral ne)
              <*> readBack mot
+readBackNeutral (NTODO loc ty) = CTODO loc <$> readBackType ty
 readBackNeutral other = error (show other)

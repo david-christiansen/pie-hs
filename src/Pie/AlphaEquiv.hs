@@ -135,6 +135,8 @@ equiv e1 e2 =
       equiv t1 t2 *> equiv e1 e2
     (CU, CU) ->
       yes
+    (CTODO loc1 _, CTODO loc2 _) ->
+      require (loc1 == loc2)
     _ ->
       no
 

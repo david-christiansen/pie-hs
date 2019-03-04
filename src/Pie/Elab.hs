@@ -100,6 +100,9 @@ withModifiedCtx f (Elab act) =
 withCtxExtension :: Symbol -> Maybe Loc -> Value -> Elab a -> Elab a
 withCtxExtension x loc t = withModifiedCtx (:> (x, HasType loc t))
 
+withCtx :: Ctx Value -> Elab a -> Elab a
+withCtx ctx = withModifiedCtx (const ctx)
+
 toEnv None = None
 toEnv (ctx :> (x, HasType _ t)) =
   toEnv ctx :> (x, VNeu t (NVar x))
@@ -701,6 +704,22 @@ check' t (EitherRight r) =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not Either"), MVal t']
+check' t TODO =
+  do t' <- readBackType t
+     loc <- currentLoc
+     ctx <- getTODOctx
+     logInfo (FoundTODO ctx t')
+     return (CTODO loc t')
+  where
+    getTODOctx =
+      getCtx >>= processCtx
+
+    -- Note: this relies on the invariant that there are no local
+    -- binding forms that extend the context with definitions. If
+    -- "let" is added to Pie, this needs revisiting.
+    processCtx (ctx :> (x, HasType loc ty)) =
+      (:>) <$> processCtx ctx <*> fmap (\t -> (x, loc, t)) (readBackType ty)
+    processCtx _ = return None
 
 check' t other =
   do SThe t' other' <- synth' other
