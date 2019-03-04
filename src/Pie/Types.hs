@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+
 module Pie.Types where
 
 import Data.List.NonEmpty (NonEmpty)

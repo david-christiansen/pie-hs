@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+
 module Pie.Elab where
 
 import Data.List.NonEmpty (NonEmpty(..))

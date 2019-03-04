@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+
 module Pie.TopLevel where
 
 import qualified Data.Text as T

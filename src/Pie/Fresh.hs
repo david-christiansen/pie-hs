@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+
 module Pie.Fresh (freshen) where
 
 import Data.Char
