@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Pie.Output where
+module Pie.Output (dumpLocElabInfo, printInfo, printLoc, printParseErr, printErr) where
 
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
@@ -10,6 +10,79 @@ import qualified Data.Text as T
 
 import Pie.Parse (ParseErr(..))
 import Pie.Types
+
+data OutputState =
+  OutputState { outputLines :: Bwd Text
+              , outputLineNum :: Int
+              , outputCurrentLine :: Text
+              }
+
+initOutputState = OutputState None 0 T.empty
+
+newtype Output a = Output { runOutput :: Int -> OutputState -> (a, OutputState) }
+
+execOutput :: Output () -> Text
+execOutput act =
+  let st = snd (runOutput act 0 initOutputState)
+  in squish (outputLines st :> outputCurrentLine st)
+  where
+    squish None = T.empty
+    squish (None :> line) = line
+    squish (lines :> line) =
+      squish lines <> T.singleton '\n' <> line
+
+instance Functor Output where
+  fmap f (Output g) =
+    Output (\i st -> let (x, st') = g i st in (f x, st'))
+
+instance Applicative Output where
+  pure x = Output (\_ st -> (x, st))
+  Output fun <*> Output arg =
+    Output (\i st ->
+              let (f, st') = fun i st
+                  (x, st'') = arg i st'
+              in (f x, st''))
+
+instance Monad Output where
+  return = pure
+  Output act >>= f =
+    Output (\i st ->
+              let (x, st') = act i st
+              in runOutput (f x) i st')
+
+
+newline :: Output ()
+newline =
+  Output (\i st ->
+            ((), st { outputLines = outputLines st :> outputCurrentLine st
+                    , outputLineNum = 1 + outputLineNum st
+                    , outputCurrentLine = T.replicate i (T.singleton ' ')
+                    }))
+
+get :: Output OutputState
+get = Output (\_ st -> (st, st))
+
+modify :: (OutputState -> OutputState) -> Output ()
+modify f = Output (\i st -> ((), f st))
+
+out :: String -> Output ()
+out = textOut . T.pack
+
+textOut :: Text -> Output ()
+textOut txt = modify (\st -> st { outputCurrentLine = outputCurrentLine st <> txt })
+
+currentIndent :: Output Int
+currentIndent = Output (\i st -> (i, st))
+
+indented :: Int -> Output a -> Output a
+indented n (Output act) =
+  Output (\i st -> act (n + i) st)
+
+indentedHere :: Output a -> Output a
+indentedHere act =
+  do i <- currentIndent
+     n <- T.length . outputCurrentLine <$> get
+     indented (n - i) act
 
 remove x [] = []
 remove x (y:ys) | x == y = remove x ys
@@ -136,92 +209,234 @@ resugar5 f e1 e2 e3 e4 e5 =
       (e5', e5f) = resugar e5
   in (Expr () (f e1' e2' e3' e4' e5'), e1f ++ e2f ++ e3f ++ e4f ++ e5f)
 
+split n xs | n <= 0 = ([], xs)
+split n [] = ([], [])
+split n (x:xs) =
+  let (before, after) = split (n - 1) xs
+  in (x : before, after)
+
+parens :: Output a -> Output a
+parens act = out "(" *> indentedHere act <* out ")"
+
+hsep :: [Output a] -> Output ()
+hsep [] = return ()
+hsep [x] = x *> return ()
+hsep (x:xs) =
+  do before <- outputLineNum <$> get
+     x
+     after <- outputLineNum <$> get
+     if before == after
+       then space *> hsep xs
+       else newline *> vsep xs
+
+vsep :: [Output a] -> Output ()
+vsep [] = return ()
+vsep [x] = x *> return ()
+vsep (x:xs) = x *> newline *> vsep xs
+
+
+tiny :: OutExpr -> Bool
+tiny (Expr () e) = tiny' e
+  where
+    tiny' Zero = True
+    tiny' (Tick _) = True
+    tiny' ListNil = True
+    tiny' VecNil = True
+    tiny' (NatLit _) = True
+    tiny' Atom = True
+    tiny' Nat = True
+    tiny' U = True
+    tiny' _ = False
+
+elim1 name tgt methods =
+  parens $
+    if tiny tgt
+      then indented 2 $
+             do hsep [out name, pp tgt]
+                newline
+                vsep (map pp methods)
+      else do out name
+              space
+              indentedHere (pp tgt)
+              indented 2 $
+                do newline
+                   vsep (map pp methods)
+
+elim2 name tgt1 tgt2 methods =
+  parens $
+    if tiny tgt1
+      then
+        indented 2 $
+          do hsep [out name, pp tgt1, pp tgt2]
+             newline
+             vsep (map pp methods)
+      else
+        do out name
+           space
+           indentedHere (do pp tgt1
+                            newline
+                            pp tgt2)
+           indented 2 $
+             do newline
+                vsep (map pp methods)
+
+
+space = out " "
+
+form name args =
+  let (little, big) = span tiny args
+  in parens . indented 1 $
+       do out name
+          mapM_ (\e -> space *> pp e) little
+          mapM_ (\e -> newline *> pp e) big
+
 -- TODO newlines and indentation and such - this is a placeholder
-pp :: OutExpr -> Text
+pp :: OutExpr -> Output ()
 pp (Expr () e) = pp' e
 
-pp' (Tick x) = T.pack "'" <> symbolName x
-pp' Atom = T.pack "Atom"
-pp' Zero = T.pack "zero"
-pp' (Add1 n) = T.pack "(add1 " <> pp n <> T.pack ")"
-pp' (NatLit n) = T.pack (show n)
-pp' (WhichNat tgt base step) = list "which-Nat" [tgt, base, step]
-pp' (IterNat tgt base step) = list "iter-Nat" [tgt, base, step]
-pp' (RecNat tgt base step) = list "rec-Nat" [tgt, base, step]
-pp' (IndNat tgt mot base step) = T.pack "(ind-Nat " <> spaced (map pp [tgt, mot, base, step]) <> T.pack ")"
-pp' Nat = T.pack "Nat"
-pp' (Var x) = symbolName x
-pp' (Arrow dom (ran:|rans)) = T.pack "(→ " <> pp dom <> T.pack " " <> spaced (map pp (ran:rans)) <> T.pack ")"
-pp' (Pi args body) = T.pack "(Π (" <> binds args <> T.pack ") " <> pp body <> T.pack ")"
-  where binds (b :| []) = bind b
-        binds (b :| (b':bs)) = bind b <> T.pack " " <> binds (b' :| bs)
-        bind (_, x, e) = T.pack "(" <> symbolName x <> T.pack " " <> pp e <> T.pack ")"
-pp' (Lambda xs body) = T.pack "(λ (" <> args xs <> T.pack ") " <> pp body <> T.pack ")"
-  where args ((_, x) :| []) = symbolName x
-        args ((_, x) :| (y:xs)) = symbolName x <> T.pack " " <> args (y:|xs)
-pp' (App rator (rand1 :| rands)) =
-  T.pack "(" <> pp rator <> T.pack " " <> pp rand1 <> more rands <> T.pack ")"
+pp' :: Expr' () -> Output ()
+pp' (Tick x) = textOut (T.pack "'" <> symbolName x)
+pp' Atom = out "Atom"
+pp' Zero = out "zero"
+pp' (Add1 n) = form "add1" [n]
+pp' (NatLit n) = out (show n)
+pp' (WhichNat tgt base step) = elim1 "which-Nat" tgt [base, step]
+pp' (IterNat tgt base step) = elim1 "iter-Nat" tgt [base, step]
+pp' (RecNat tgt base step) = elim1 "rec-Nat" tgt [base, step]
+pp' (IndNat tgt mot base step) =
+  elim1 "ind-Nat" tgt [mot, base, step]
+pp' Nat = out "Nat"
+pp' (Var x) = textOut (symbolName x)
+pp' (Arrow dom (ran:|rans)) =
+  let (args, ret) = splitArgs (dom :| (ran : rans))
+  in parens $
+       do out "→"
+          space
+          indentedHere $
+            if all tiny args
+              then hsep (map pp args)
+              else vsep (map pp args)
+          indented 1 (newline *> pp ret)
   where
-    more [] = T.empty
-    more [x] = pp x
-    more es@(_:_) = spaced (map pp es)
-pp' (Sigma args body) = T.pack "(Σ (" <> binds args <> T.pack ") " <> pp body <> T.pack ")"
-  where binds (b :| []) = bind b
-        binds (b :| (b':bs)) = bind b <> T.pack " " <> binds (b' :| bs)
-        bind (_, x, e) = T.pack "(" <> symbolName x <> T.pack " " <> pp e <> T.pack ")"
-pp' (Pair a d) = T.pack "(Pair " <> pp a <> T.pack " " <> pp d <> T.pack ")"
-pp' (Cons a d) = T.pack "(cons " <> pp a <> T.pack " " <> pp d <> T.pack ")"
-pp' (Car p) = T.pack "(car " <> pp p <> T.pack ")"
-pp' (Cdr p) = T.pack "(cdr " <> pp p <> T.pack ")"
-pp' Trivial = T.pack "Trivial"
-pp' Sole = T.pack "sole"
-pp' (Eq t from to) = list "=" [t, from, to]
-pp' (Same e) = list "same" [e]
-pp' (Replace tgt mot base) = list "replace" [tgt, mot, base]
-pp' (Trans p1 p2) = list "trans" [p1, p2]
-pp' (Cong p fun) = list "cong" [p, fun]
-pp' (Symm e) = list "symm" [e]
-pp' (IndEq tgt mot base) = list "ind-=" [tgt, mot, base]
-pp' (List elem) = list "List" [elem]
-pp' ListNil = T.pack "nil"
-pp' (ListCons e es) = list "::" [e, es]
-pp' (RecList tgt base step) = list "rec-List" [tgt, base, step]
-pp' (IndList tgt mot base step) = list "ind-List" [tgt, mot, base, step]
-pp' (Vec elem len) = list "Vec" [elem, len]
-pp' VecNil = T.pack "vecnil"
-pp' (VecCons e es) = list "vec::" [e, es]
-pp' (VecHead es) = list "head" [es]
-pp' (VecTail es) = list "tail" [es]
-pp' (IndVec len tgt mot base step) = list "ind-Vec" [len, tgt, mot, base, step]
-pp' (Either l r) = list "Either" [l, r]
-pp' (EitherLeft l) = list "left" [l]
-pp' (EitherRight r) = list "right" [r]
-pp' (IndEither tgt mot l r) = list "ind-Either" [tgt, mot, l, r]
-pp' Absurd = T.pack "Absurd"
-pp' (IndAbsurd tgt mot) = list "ind-Absurd" [tgt, mot]
-pp' U = T.pack "U"
-pp' (The t e) = T.pack "(the " <> pp t <> T.pack " " <> pp e <> T.pack ")"
-pp' TODO = T.pack "TODO"
+    splitArgs (t :| []) = ([], t)
+    splitArgs (t:|(x:xs)) =
+      let (args', ret) = splitArgs (x :| xs)
+      in (t : args', ret)
+pp' (Pi args body) =
+  parens (out "Π " *> parens (vsep (binds args) *>
+          indented 1 (newline *> pp body)))
+  where binds (b :| []) = [bind b]
+        binds (b :| (b':bs)) = bind b : binds (b' :| bs)
+        bind (_, x, e) = parens (textOut (symbolName x) *> out " " *> pp e)
+pp' (Lambda xs body) =
+  parens . indented 1 $
+    do out "λ"
+       space
+       parens (args xs)
+       newline
+       pp body
+  where
+    args ((_, x) :| []) =
+      textOut (symbolName x)
+    args ((_, x) :| (y:xs)) =
+      textOut (symbolName x) *> space *> args (y :| xs)
+pp' (App rator (rand1 :| rands)) =
+  let (small, big) = span tiny (rand1 : rands)
+  in parens . indented 1 $
+       if tiny rator
+         then hsep (map pp (rator : small)) *> newline *> vsep (map pp big)
+         else pp rator *> newline *> vsep (map pp (rand1 : rands))
+pp' (Sigma args body) =
+  parens (out "Σ " *> parens (indentedHere (vsep (binds args)) *>
+          indented 2 (newline *> pp body)))
+  where binds (b :| []) = [bind b]
+        binds (b :| (b':bs)) = bind b : binds (b' :| bs)
+        bind (_, x, e) = parens (textOut (symbolName x) *> out " " *> pp e)
+pp' (Pair a d) = form "Pair" [a, d]
+pp' (Cons a d)
+  | tiny a && tiny d =
+    parens (hsep [out "cons", pp a, pp d])
+  | otherwise =
+    parens (do out "cons"
+               space
+               pp a
+               newline
+               pp d)
+pp' (Car p) = form "car" [p]
+pp' (Cdr p) = form "cdr" [p]
+pp' Trivial = out "Trivial"
+pp' Sole = out "sole"
+pp' (Eq t from to)
+  | all tiny [t, from, to] =
+    parens (hsep [out "=", pp t, pp from, pp to])
+  | otherwise =
+    parens (vsep [out "=", pp t, pp from, pp to])
+pp' (Same e) = form "same" [e]
+pp' (Replace tgt mot base) =
+  elim1 "replace" tgt [mot, base]
+pp' (Trans p1 p2) = form "trans" [p1, p2]
+pp' (Cong p fun) = form "cong" [p, fun]
+pp' (Symm e) = form "symm" [e]
+pp' (IndEq tgt mot base) = elim1 "ind-=" tgt [mot, base]
+pp' (List elem) = form "List" [elem]
+pp' ListNil = out "nil"
+pp' (ListCons e es) = form "::" [e, es]
+pp' (RecList tgt base step) = elim1 "rec-List" tgt [base, step]
+pp' (IndList tgt mot base step) = elim1 "ind-List" tgt [mot, base, step]
+pp' (Vec elem len) = form "Vec" [elem, len]
+pp' VecNil = out "vecnil"
+pp' (VecCons e es) = form "vec::" [e, es]
+pp' (VecHead es) = form "head" [es]
+pp' (VecTail es) = form "tail" [es]
+pp' (IndVec len tgt mot base step) = elim2 "ind-Vec" len tgt [mot, base, step]
+pp' (Either l r) = form "Either" [l, r]
+pp' (EitherLeft l) = form "left" [l]
+pp' (EitherRight r) = form "right" [r]
+pp' (IndEither tgt mot l r) = elim1 "ind-Either" tgt [mot, l, r]
+pp' Absurd = out "Absurd"
+pp' (IndAbsurd tgt mot) = elim1 "ind-Absurd" tgt [mot]
+pp' U = out "U"
+pp' (The t e) =
+  parens . indented 1 $
+    do out "the"
+       space
+       indentedHere (pp t)
+       newline
+       pp e
+pp' TODO = out "TODO"
 
 spaced ss = mconcat (intersperse (T.pack " ") ss)
 
-list name args = T.pack "(" <> T.pack name <> T.pack " " <> spaced (map pp args) <> T.pack ")"
+indentTextBlock i txt =
+  let lines = T.lines txt
+  in case lines of
+    [] -> T.empty
+    [l] -> l
+    _ -> T.singleton '\n' <>
+         T.unlines [ T.replicate i (T.singleton ' ') <> line
+                   | line <- lines
+                   ]
 
 printInfo :: ElabInfo -> Text
 printInfo (ExprHasType c) =
-  T.pack "Has type " <> pp (fst (resugar c))
+  T.pack "Has type " <> execOutput (pp (fst (resugar c)))
 printInfo ExprIsType = T.pack "A type"
 printInfo (ExprWillHaveType c) =
-  T.pack "Will have type " <> pp (fst (resugar c))
+  T.pack "Will have type " <> execOutput (pp (fst (resugar c)))
 printInfo (ClaimAt loc) =
   T.pack "Claim from " <> printLoc loc
 printInfo (BoundAt loc) =
   T.pack "Bound at " <> printLoc loc
 printInfo (ExampleOut c) =
-  pp (fst (resugar c))
+  let expr = fst (resugar c)
+      norm = execOutput (pp expr)
+  in T.pack "Example's normal form is " <>
+     if tiny expr
+       then norm
+       else indentTextBlock 2 norm
 printInfo (FoundTODO ctx ty) =
   let ctx' = printTODOCtx ctx
-      ty'  = pp (fst (resugar ty))
+      ty'  = execOutput (pp (fst (resugar ty)))
       line = T.replicate (2 + maxLineLength (ctx' <> nl <> ty')) (T.pack "-")
   in T.pack "Found TODO:" <> indent ctx' <> line <> nl <> indent ty'
 
@@ -246,7 +461,7 @@ printTODOCtx ctx =
     toList (xs :> x) ys = toList xs (x:ys)
 
     showLine w x t =
-      padTo w (symbolName x) <> T.pack " : " <> pp (fst (resugar t))
+      padTo w (symbolName x) <> T.pack " : " <> execOutput (pp (fst (resugar t)))
 
     padTo w txt = T.replicate (w - T.length txt) (T.singleton ' ') <> txt
 
@@ -261,7 +476,7 @@ printErr input (ElabErr (Located loc msg)) =
     mconcat (intersperse (T.pack " ") [showPart part | part <- msg])
   where
     showPart (MText txt) = txt
-    showPart (MVal c) = pp (fst (resugar c))
+    showPart (MVal c) = execOutput (pp (fst (resugar c)))
 
 highlightLoc :: Text -> Loc -> Text
 highlightLoc input (Loc fn (Pos l1 c1) (Pos l2 c2)) =
