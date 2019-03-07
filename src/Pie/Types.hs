@@ -19,7 +19,11 @@ instance Functor Bwd where
 
 
 newtype Symbol = Symbol { symbolName :: Text }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show Symbol where
+  showsPrec p (Symbol x) =
+    showParen (p > 0) (showString ("Symbol \"" ++  T.unpack x ++ "\""))
 
 sym :: String -> Symbol
 sym = Symbol . T.pack
