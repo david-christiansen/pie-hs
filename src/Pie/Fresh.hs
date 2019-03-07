@@ -24,17 +24,24 @@ freshen' used split =
        then freshen' used (nextSplitName split)
        else joined
 
+nameRegex = T.pack "^((?:[\\p{Letter}[0-9]]*[\\p{Letter}])?)([0-9₀₁₂₃₄₅₆₇₈₉]*)$"
+
 splitName :: Text -> (Text, Integer)
 splitName t =
   case find (regex [] nameRegex) t of
     Just m ->
-      case (group 0 m, group 1 m) of
-        (Just x, Just i) -> (x, read (T.unpack i))
-        (Just x, Nothing) -> (x, 0)
-        _ -> (t, 0)
-    Nothing -> (t, 0)
-  where
-    nameRegex = (T.pack "^([\\p{Letter}[0-9]]*[\\p{Letter}])([0-9]*₀₁₂₃₄₅₆₇₈₉)$")
+      let x = case group 1 m of
+                Just y
+                  | y == T.empty -> T.pack "x"
+                  | otherwise -> y
+                Nothing -> T.pack "x"
+          n = case group 2 m of
+                Just i
+                  | i == T.empty -> 1
+                  | otherwise -> read (asNonSubscript (T.unpack i))
+                Nothing -> 1
+      in (x, n)
+    Nothing -> (t, 1)
 
 
 nextSplitName :: (txt, Integer) -> (txt, Integer)
@@ -43,6 +50,13 @@ nextSplitName (base, i) = (base, i + 1)
 unsplitName :: (Text, Integer) -> Symbol
 unsplitName (base, i) =
   Symbol (base <> asSubscript i)
+
+asNonSubscript i = map fromSub i
+  where
+    fromSub c =
+      case lookup c nonSubscripts of
+        Just c' -> c'
+        Nothing -> c
 
 asSubscript i = T.pack (map toSub (show i))
   where

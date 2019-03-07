@@ -1,9 +1,12 @@
 module Main where
 
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.Text (Text)
+import qualified Data.Text as T
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import Pie.Fresh
 import Pie.Types
 import Pie.AlphaEquiv
 import qualified Pie.Elab as E
@@ -13,7 +16,7 @@ import qualified Pie.Parse as P
 
 main = defaultMain tests
 
-tests = testGroup "Pie tests" [normTests, parsingSourceLocs]
+tests = testGroup "Pie tests" [freshNames, normTests, parsingSourceLocs]
 
 
 normTests =
@@ -39,6 +42,23 @@ normTests =
           )
         ]
     ]
+
+freshNames =
+  testGroup "Freshness"
+   [ testCase (show used ++ " : " ++ T.unpack (symbolName x) ++ " ⇒ " ++ T.unpack (symbolName x'))
+       (x' @=? freshen used x)
+   | (used, x, x') <- [ ([sym "x"], sym "x", sym "x₁")
+                      , ([sym "x", sym "x₁", sym "x₂"], sym "x", sym "x₃")
+                      , ([sym "x", sym "x1", sym "x2"], sym "y", sym "y")
+                      , ([sym "r2d", sym "r2d₀", sym "r2d₁"], sym "r2d", sym "r2d₂")
+                      , ([], sym "A", sym "A")
+                      , ([sym "x₁"], sym "x₁", sym "x₂")
+                      , ([], sym "x₁", sym "x₁")
+                      , ([], sym "₉₉", sym "₉₉")
+                      , ([sym "₉₉"], sym "₉₉", sym "x₉₉")
+                      , ([sym "₉₉", sym "x₉₉"], sym "₉₉", sym "x₁₀₀")
+                      ]
+   ]
 
 parsingSourceLocs = testGroup "Source locations from parser"
   [ testCase (show str) (parseTest str test)
