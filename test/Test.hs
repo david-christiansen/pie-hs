@@ -1,5 +1,6 @@
 module Main where
 
+import Data.List (intersperse)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -21,7 +22,7 @@ tests = testGroup "Pie tests" [freshNames, alpha, normTests, testTick, parsingSo
 
 normTests =
   testGroup "Normalization"
-    [ testCase (input ++ " has normal form " ++ normal) (hasNorm input normal)
+    [ testCase (abbrev input ++ " has normal form " ++ abbrev normal) (hasNorm input normal)
     | (input, normal) <-
         -- Base types
         [ ("(the Trivial sole)", "sole")
@@ -43,9 +44,14 @@ normTests =
         ]
     ]
 
+abbrev txt = if length txt >= 30 then take 29 txt ++ "…" else txt
+
+
 freshNames =
   testGroup "Freshness"
-   [ testCase (show used ++ " : " ++ T.unpack (symbolName x) ++ " ⇒ " ++ T.unpack (symbolName x'))
+   [ testCase (concat (intersperse ", " (map (T.unpack . symbolName) used)) ++
+               " ⊢ " ++ T.unpack (symbolName x) ++ " fresh ↝ " ++
+               T.unpack (symbolName x'))
        (x' @=? freshen used x)
    | (used, x, x') <- [ ([sym "x"], sym "x", sym "x₁")
                       , ([sym "x", sym "x₁", sym "x₂"], sym "x", sym "x₃")
@@ -127,7 +133,7 @@ alpha = testGroup "α-equivalence" $
   where
     testAlpha left right res =
       let correct x = x @=? res
-      in testCase (show left ++ " α≡? " ++ show right) $
+      in testCase (abbrev (show left) ++ " α≡? " ++ abbrev (show right)) $
          correct $
          case alphaEquiv left right of
            Left _ -> False
@@ -135,10 +141,21 @@ alpha = testGroup "α-equivalence" $
 
 testTick = testGroup "Validity checking of atoms" $
   [testCase ("'" ++ str ++ " OK") (mustElab (E.synth' (Tick (Symbol (T.pack str)))) *> pure ())
-  | str <- ["food", "food---", "œ", "rugbrød", "देवनागरी", "日本語", "atØm", "λ", "λάμβδα"]
+  | str <- [ "food"
+           , "food---"
+           , "œ"
+           , "rugbrød"
+           , "देवनागरी"
+           , "日本語"
+           , "atØm"
+           , "λ"
+           , "λάμβδα"
+           ]
   ] ++
   [testCase ("'" ++ str ++ " not OK") (mustNotElab (E.synth' (Tick (Symbol (T.pack str)))))
-  | str <- ["at0m", "\128758"]
+  | str <- [ "at0m"    -- contains 0
+           , "\128758" -- canoe emoji
+           ]
   ]
 
 

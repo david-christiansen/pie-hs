@@ -23,7 +23,7 @@ newtype Symbol = Symbol { symbolName :: Text }
 
 instance Show Symbol where
   showsPrec p (Symbol x) =
-    showParen (p > 0) (showString ("Symbol \"" ++  T.unpack x ++ "\""))
+    showParen (p > 10) (showString ("Symbol \"" ++  T.unpack x ++ "\""))
 
 sym :: String -> Symbol
 sym = Symbol . T.pack
@@ -45,7 +45,11 @@ pieKeywords =
     "TODO", "the"]
 
 data Pos = Pos { posLine :: Int, posCol :: Int }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Pos where
+  showsPrec p (Pos line col) =
+    showParen (p > 10) (showString "Pos " . shows line . showString " " . shows col)
 
 instance Ord Pos where
   compare (Pos l1 c1) (Pos l2 c2) =
@@ -64,7 +68,11 @@ data Loc = Loc { locSource :: FilePath
                , locStart :: Pos
                , locEnd :: Pos
                }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Loc where
+  showsPrec p (Loc src start end) =
+    showParen (p > 10) (showString "Loc " . showString (show src) . showString " " . showsPrec 11 start . showString " " . showsPrec 11 end)
 
 instance Ord Loc where
   compare (Loc src1 s1 e1) (Loc src2 s2 e2) =
