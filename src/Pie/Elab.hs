@@ -2,6 +2,7 @@
 
 module Pie.Elab where
 
+import Data.Char (isLetter)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
@@ -232,6 +233,7 @@ toplevel e =
      eN <- readBack (NThe tv val)
      return (CThe t eN)
 
+
 synth :: Expr -> Elab SynthResult
 synth e =
   do res@(SThe tv _) <- inExpr e synth'
@@ -239,7 +241,12 @@ synth e =
      inExpr e (const (logInfo (ExprHasType t)))
      return res
 
-synth' (Tick x) = pure (SThe VAtom (CTick x)) -- TODO check validity of x
+synth' (Tick x)
+  | T.all (\ch -> isLetter ch || ch == '-') (symbolName x) &&
+    T.length (symbolName x) > 0 =
+    pure (SThe VAtom (CTick x))
+  | otherwise =
+    failure [MText (T.pack "Atoms may contain only letters and hyphens")]
 synth' Atom = pure (SThe VU CAtom)
 synth' Zero = pure (SThe VNat CZero)
 synth' (Add1 n) =

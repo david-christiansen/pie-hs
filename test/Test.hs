@@ -16,7 +16,7 @@ import qualified Pie.Parse as P
 
 main = defaultMain tests
 
-tests = testGroup "Pie tests" [freshNames, alpha, normTests, parsingSourceLocs]
+tests = testGroup "Pie tests" [freshNames, alpha, normTests, testTick, parsingSourceLocs]
 
 
 normTests =
@@ -133,7 +133,13 @@ alpha = testGroup "α-equivalence" $
            Left _ -> False
            Right _ -> True
 
-
+testTick = testGroup "Validity checking of atoms" $
+  [testCase ("'" ++ str ++ " OK") (mustElab (E.synth' (Tick (Symbol (T.pack str)))) *> pure ())
+  | str <- ["food", "food---", "œ", "rugbrød", "देवनागरी", "日本語", "atØm", "λ", "λάμβδα"]
+  ] ++
+  [testCase ("'" ++ str ++ " not OK") (mustNotElab (E.synth' (Tick (Symbol (T.pack str)))))
+  | str <- ["at0m", "\128758"]
+  ]
 
 
 parsingSourceLocs = testGroup "Source locations from parser"
@@ -178,6 +184,15 @@ mustSucceed ::
 mustSucceed (Left e) = assertFailure (show e)
 mustSucceed (Right x) = return x
 
+mustFail ::
+  Show a =>
+  Either e a ->
+  IO ()
+mustFail (Left e) = return ()
+mustFail (Right x) =
+  assertFailure ("Expected failure, but succeeded with " ++ show x)
+
+
 mustParse :: P.Parser a -> String -> IO a
 mustParse p e = mustSucceed (P.testParser p e)
 
@@ -187,6 +202,13 @@ mustParseExpr = mustParse P.expr
 mustElab :: E.Elab a -> IO a
 mustElab act =
   mustSucceed (snd (E.runElab act None (Loc "<test suite>" (Pos 1 1) (Pos 1 1)) []))
+
+
+mustNotElab :: Show a => E.Elab a -> IO ()
+mustNotElab act =
+  mustFail (snd (E.runElab act None (Loc "<test suite>" (Pos 1 1) (Pos 1 1)) []))
+
+
 
 
 mustBeAlphaEquiv :: Core -> Core -> IO ()
