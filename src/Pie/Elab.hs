@@ -2,7 +2,7 @@
 
 module Pie.Elab where
 
-import Data.Char (isLetter)
+import Data.Char (isLetter, isMark)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
@@ -242,7 +242,7 @@ synth e =
      return res
 
 synth' (Tick x)
-  | T.all (\ch -> isLetter ch || ch == '-') (symbolName x) &&
+  | T.all (\ch -> isLetter ch || isMark ch || ch == '-') (symbolName x) &&
     T.length (symbolName x) > 0 =
     pure (SThe VAtom (CTick x))
   | otherwise =
