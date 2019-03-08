@@ -16,7 +16,7 @@ import qualified Pie.Parse as P
 
 main = defaultMain tests
 
-tests = testGroup "Pie tests" [freshNames, normTests, parsingSourceLocs]
+tests = testGroup "Pie tests" [freshNames, alpha, normTests, parsingSourceLocs]
 
 
 normTests =
@@ -59,6 +59,82 @@ freshNames =
                       , ([sym "₉₉", sym "x₉₉"], sym "₉₉", sym "x₁₀₀")
                       ]
    ]
+
+alpha = testGroup "α-equivalence" $
+  let x = sym "x"
+      y = sym "y"
+      z = sym "z"
+      f = sym "f"
+      g = sym "g"
+      loc1 = Loc "hello.pie" (Pos 1 1) (Pos 1 5)
+      loc2 = Loc "hello.pie" (Pos 3 4) (Pos 3 8)
+  in [ testAlpha left right res
+     | (left, right, res) <-
+       [ (CLambda x (CVar x), CLambda x (CVar x), True)
+       , (CLambda x (CVar x), CLambda y (CVar y), True)
+       , (CLambda x (CLambda y (CVar x)) , CLambda x (CLambda y (CVar x)), True)
+       , (CLambda x (CLambda y (CVar x)) , CLambda y (CLambda z (CVar y)), True)
+       , (CLambda x (CLambda y (CVar x)) , CLambda y (CLambda z (CVar z)), False)
+       , (CLambda x (CLambda y (CVar x)) , CLambda y (CLambda x (CVar x)), False)
+       , (CLambda x (CVar x), CLambda y (CVar x), False)
+       , (CVar x, CVar x, True)
+       , (CVar x, CVar y, False)
+       , (CApp (CVar f) (CVar x), CApp (CVar f) (CVar x), True)
+       , (CApp (CVar f) (CVar x), CApp (CVar g) (CVar x), False)
+       , (CLambda f (CApp (CVar f) (CVar x)), CLambda g (CApp (CVar g) (CVar x)), True)
+       , (CZero, CZero, True)
+       , (CAdd1 CZero, CAdd1 CZero, True)
+       , (CTick (sym "rugbrød"), CTick (sym "rugbrød"), True)
+       , (CTick (sym "rugbrød"), CTick (sym "rundstykker"), False)
+       , ( CSigma (sym "half") CNat
+            (CEq CNat (CVar (sym "n")) (CApp (CVar (sym "double")) (CVar (sym "half"))))
+         , CSigma (sym "blurgh") CNat
+           (CEq CNat (CVar (sym "n")) (CApp (CVar (sym "double")) (CVar (sym "blurgh"))))
+         , True
+         )
+       , ( CSigma (sym "half") CNat
+            (CEq CNat (CVar (sym "n")) (CApp (CVar (sym "double")) (CVar (sym "half"))))
+         , CSigma (sym "half") CNat
+           (CEq CNat (CVar (sym "n")) (CApp (CVar (sym "twice")) (CVar (sym "half"))))
+         , False
+         )
+       , (CThe CAbsurd (CVar x), CThe CAbsurd (CVar x), True)
+       , (CThe CAbsurd (CVar x), CThe CAbsurd (CVar y), True)
+       , (CThe CAbsurd (CVar x), CThe CAbsurd (CApp (CVar (sym "find-the-proof")) (CVar x)), True)
+       , (CTODO loc1 CNat, CTODO loc1 CNat, True)
+       , (CTODO loc1 CNat, CTODO loc2 CNat, False)
+       , (CZero, CVar (sym "naught"), False)
+       , ( CPi (sym "n") CNat
+             (CEq CNat (CVar (sym "n")) (CVar (sym "n")))
+         , CPi (sym "m") CNat
+             (CEq CNat (CVar (sym "m")) (CVar (sym "m")))
+         , True
+         )
+       , ( CPi (sym "n") CNat
+             (CEq CNat (CVar (sym "n")) (CVar (sym "n")))
+         , CPi (sym "m") CNat
+             (CEq CNat (CVar (sym "n")) (CVar (sym "n")))
+         , False
+         )
+       , ( CPi (sym "n") CNat
+             (CEq CNat (CVar (sym "n")) (CVar (sym "n")))
+         , CSigma (sym "m") CNat
+             (CEq CNat (CVar (sym "m")) (CVar (sym "m")))
+         , False
+         )
+       ]
+     ]
+  where
+    testAlpha left right res =
+      let correct x = x @=? res
+      in testCase (show left ++ " α≡? " ++ show right) $
+         correct $
+         case alphaEquiv left right of
+           Left _ -> False
+           Right _ -> True
+
+
+
 
 parsingSourceLocs = testGroup "Source locations from parser"
   [ testCase (show str) (parseTest str test)
