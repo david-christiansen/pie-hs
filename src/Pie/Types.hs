@@ -113,8 +113,20 @@ type Expr = LocatedExpr Loc
 type OutExpr = LocatedExpr ()
 
 
-data Expr' loc = Tick Symbol
+data Expr' loc = The (LocatedExpr loc) (LocatedExpr loc)
+               | Var Symbol
                | Atom
+               | Tick Symbol
+               | Pair (LocatedExpr loc) (LocatedExpr loc)
+               | Sigma (NonEmpty (loc, Symbol, (LocatedExpr loc))) (LocatedExpr loc)
+               | Cons (LocatedExpr loc) (LocatedExpr loc)
+               | Car (LocatedExpr loc)
+               | Cdr (LocatedExpr loc)
+               | Arrow (LocatedExpr loc) (NonEmpty (LocatedExpr loc))
+               | Pi (NonEmpty (loc, Symbol, (LocatedExpr loc))) (LocatedExpr loc)
+               | Lambda (NonEmpty (loc, Symbol)) (LocatedExpr loc)
+               | App (LocatedExpr loc) (NonEmpty (LocatedExpr loc))
+               | Nat
                | Zero
                | Add1 (LocatedExpr loc)
                | NatLit Integer
@@ -122,26 +134,6 @@ data Expr' loc = Tick Symbol
                | IterNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | RecNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | IndNat (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
-               | Nat
-               | Var Symbol
-               | Arrow (LocatedExpr loc) (NonEmpty (LocatedExpr loc))
-               | Pi (NonEmpty (loc, Symbol, (LocatedExpr loc))) (LocatedExpr loc)
-               | Lambda (NonEmpty (loc, Symbol)) (LocatedExpr loc)
-               | App (LocatedExpr loc) (NonEmpty (LocatedExpr loc))
-               | Sigma (NonEmpty (loc, Symbol, (LocatedExpr loc))) (LocatedExpr loc)
-               | Pair (LocatedExpr loc) (LocatedExpr loc)
-               | Cons (LocatedExpr loc) (LocatedExpr loc)
-               | Car (LocatedExpr loc)
-               | Cdr (LocatedExpr loc)
-               | Trivial
-               | Sole
-               | Eq (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
-               | Same (LocatedExpr loc)
-               | Replace (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
-               | Trans (LocatedExpr loc) (LocatedExpr loc)
-               | Cong (LocatedExpr loc) (LocatedExpr loc)
-               | Symm (LocatedExpr loc)
-               | IndEq (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | List (LocatedExpr loc)
                | ListNil
                | ListCons (LocatedExpr loc) (LocatedExpr loc)
@@ -153,43 +145,43 @@ data Expr' loc = Tick Symbol
                | VecHead (LocatedExpr loc)
                | VecTail (LocatedExpr loc)
                | IndVec (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Eq (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Same (LocatedExpr loc)
+               | Symm (LocatedExpr loc)
+               | Cong (LocatedExpr loc) (LocatedExpr loc)
+               | Replace (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Trans (LocatedExpr loc) (LocatedExpr loc)
+               | IndEq (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
                | Either (LocatedExpr loc) (LocatedExpr loc)
                | EitherLeft (LocatedExpr loc)
                | EitherRight (LocatedExpr loc)
                | IndEither (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc) (LocatedExpr loc)
+               | Trivial
+               | Sole
                | Absurd
                | IndAbsurd (LocatedExpr loc) (LocatedExpr loc)
                | U
-               | The (LocatedExpr loc) (LocatedExpr loc)
                | TODO
   deriving (Eq, Show)
 
-data Core = CTick Symbol
+data Core = CThe Core Core
+          | CVar Symbol
           | CAtom
+          | CTick Symbol
+          | CSigma Symbol Core Core
+          | CCons Core Core
+          | CCar Core
+          | CCdr Core
+          | CPi Symbol Core Core
+          | CLambda Symbol Core
+          | CApp Core Core
+          | CNat
           | CZero
           | CAdd1 Core
           | CWhichNat Core Core Core Core
           | CIterNat Core Core Core Core
           | CRecNat Core Core Core Core
           | CIndNat Core Core Core Core
-          | CNat
-          | CVar Symbol
-          | CPi Symbol Core Core
-          | CLambda Symbol Core
-          | CApp Core Core
-          | CSigma Symbol Core Core
-          | CCons Core Core
-          | CCar Core
-          | CCdr Core
-          | CTrivial
-          | CSole
-          | CEq Core Core Core
-          | CSame Core
-          | CReplace Core Core Core
-          | CTrans Core Core
-          | CCong Core Core Core
-          | CSymm Core
-          | CIndEq Core Core Core
           | CList Core
           | CListNil
           | CListCons Core Core
@@ -201,14 +193,22 @@ data Core = CTick Symbol
           | CVecHead Core
           | CVecTail Core
           | CIndVec Core Core Core Core Core
+          | CEq Core Core Core
+          | CSame Core
+          | CSymm Core
+          | CCong Core Core Core
+          | CReplace Core Core Core
+          | CTrans Core Core
+          | CIndEq Core Core Core
           | CEither Core Core
           | CLeft Core
           | CRight Core
           | CIndEither Core Core Core Core
+          | CTrivial
+          | CSole
           | CAbsurd
           | CIndAbsurd Core Core
           | CU
-          | CThe Core Core
           | CTODO Loc Core
   deriving (Eq, Show)
 
@@ -218,54 +218,54 @@ data TopLevel a = Claim (Located Symbol) a
                 | Example a
   deriving Show
 
-data Value = VTick Symbol
-           | VAtom
+data Value = VAtom
+           | VTick Symbol
+           | VSigma Symbol Value (Closure Value)
+           | VCons Value Value
+           | VPi Symbol Value (Closure Value)
+           | VLambda Symbol (Closure Value)
            | VNat
            | VZero
            | VAdd1 Value
-           | VPi Symbol Value (Closure Value)
-           | VLambda Symbol (Closure Value)
-           | VSigma Symbol Value (Closure Value)
-           | VCons Value Value
-           | VTrivial
-           | VSole
-           | VEq Value Value Value
-           | VSame Value
            | VList Value
            | VListNil
            | VListCons Value Value
            | VVec Value Value
-           | VVecCons Value Value
            | VVecNil
+           | VVecCons Value Value
+           | VEq Value Value Value
+           | VSame Value
            | VEither Value Value
            | VLeft Value
            | VRight Value
+           | VTrivial
+           | VSole
            | VAbsurd
            | VU
            | VNeu Value Neutral
   deriving Show
 
 data Neutral = NVar Symbol
+             | NCar Neutral
+             | NCdr Neutral
+             | NApp Neutral Normal
              | NWhichNat Neutral Normal Normal
              | NIterNat Neutral Normal Normal
              | NRecNat Neutral Normal Normal
              | NIndNat Neutral Normal Normal Normal
-             | NApp Neutral Normal
-             | NCar Neutral
-             | NCdr Neutral
-             | NReplace Neutral Normal Normal
-             | NTrans1 Neutral Normal
-             | NTrans2 Normal Neutral
-             | NTrans12 Neutral Neutral
-             | NCong Neutral Normal
-             | NSymm Neutral
-             | NIndEq Neutral Normal Normal
              | NRecList Neutral Normal Normal
              | NIndList Neutral Normal Normal Normal
              | NHead Neutral
              | NTail Neutral
              | NIndVec12 Neutral Neutral Normal Normal Normal
              | NIndVec2 Normal Neutral Normal Normal Normal
+             | NSymm Neutral
+             | NCong Neutral Normal
+             | NReplace Neutral Normal Normal
+             | NTrans1 Neutral Normal
+             | NTrans2 Normal Neutral
+             | NTrans12 Neutral Neutral
+             | NIndEq Neutral Normal Normal
              | NIndEither Neutral Normal Normal Normal
              | NIndAbsurd Neutral Normal
              | NTODO Loc Value
