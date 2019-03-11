@@ -166,39 +166,12 @@ isType e =
      inExpr e (const (logInfo ExprIsType))
      return res
 
+-- TODO Consider splitting the nested formation rules for →, Π, Σ at top-level
+-- for consistency with inference rule presentation
 isType' :: (Expr' Loc) -> Elab Core
-isType' U = pure CU
-isType' Nat = pure CNat
+-- AtomF on p. 371
 isType' Atom = pure CAtom
-isType' (Arrow dom (t:|ts)) =
-  do x <- fresh (Symbol (T.pack "x"))
-     dom' <- isType dom
-     domVal <- eval dom'
-     ran' <- withCtxExtension x Nothing domVal $
-             case ts of
-               [] ->
-                 isType t
-               (ty : tys) ->
-                 isType' (Arrow t (ty :| tys))
-     return (CPi x dom' ran')
-isType' (Pi ((loc, x, dom) :| doms) ran) =
-  do dom' <- isType dom
-     domVal <- eval dom'
-     x' <- fresh x
-     ran' <- withCtxExtension x' (Just loc) domVal $
-             rename x x' $
-             case doms of
-               [] ->
-                 isType ran
-               (nextArg : ds) ->
-                 isType' (Pi (nextArg :| ds) ran)
-     return (CPi x' dom' ran')
-isType' (Pair a d) =
-  do x <- fresh (Symbol (T.pack "x"))
-     a' <- isType a
-     aVal <- eval a'
-     d' <- withCtxExtension x Nothing aVal $ isType d
-     return (CSigma x a' d')
+-- ΣF on p. 371
 isType' (Sigma ((loc, x, a) :| as) d) =
   do a' <- isType a
      aVal <- eval a'
@@ -206,20 +179,69 @@ isType' (Sigma ((loc, x, a) :| as) d) =
      d' <- withCtxExtension x (Just loc) aVal $
            rename x x' $
              case as of
+               -- ΣF-1
                [] ->
                  isType d
+               -- ΣF-2
                (nextA : ds) ->
                  isType' (Sigma (nextA :| ds) d)
      return (CSigma x' a' d')
+-- ΣF-Pair on p. 372
+isType' (Pair a d) =
+  do x <- fresh (Symbol (T.pack "x"))
+     a' <- isType a
+     aVal <- eval a'
+     d' <- withCtxExtension x Nothing aVal $ isType d
+     return (CSigma x a' d')
+-- FunF on p. 373
+isType' (Pi ((loc, x, arg) :| args) r) =
+  do arg' <- isType arg
+     argVal <- eval arg'
+     x' <- fresh x
+     r' <- withCtxExtension x' (Just loc) argVal $
+           rename x x' $
+           case args of
+             -- FunF-1
+             [] ->
+               isType r
+             -- FunF-2
+             (nextArg : ds) ->
+               isType' (Pi (nextArg :| ds) r)
+     return (CPi x' arg' r')
+-- FunF→ on p. 373
+isType' (Arrow arg (t:|ts)) =
+  do x <- fresh (Symbol (T.pack "x"))
+     arg' <- isType arg
+     argVal <- eval arg'
+     r' <- withCtxExtension x Nothing argVal $
+           case ts of
+             -- FunF→1
+             [] ->
+               isType t
+             -- FunF→2
+             (ty : tys) ->
+               isType' (Arrow t (ty :| tys))
+     return (CPi x arg' r')
+-- NatF on p. 374
+isType' Nat = pure CNat
+-- ListF on p. 378
+isType' (List e) = CList <$> isType e
+-- VecF on p. 381
+isType' (Vec e len) = CVec <$> isType e <*> check VNat len
+-- EqF on p. 383
+isType' (Eq x from to) =
+  do x' <- isType x
+     xVal <- eval x'
+     CEq x' <$> check xVal from <*> check xVal to
+-- EitherF on p. 386
+isType' (Either p s) = CEither <$> isType p <*> isType s
+-- TrivF on p. 387
 isType' Trivial = return CTrivial
-isType' (Eq t from to) =
-  do t' <- isType t
-     tV <- eval t'
-     CEq t' <$> check tV from <*> check tV to
-isType' (Vec t len) = CVec <$> isType t <*> check VNat len
-isType' (List elem) = CList <$> isType elem
-isType' (Either l r) = CEither <$> isType l <*> isType r
+-- AbsF on p. 388
 isType' Absurd = return CAbsurd
+-- UF on p. 389
+isType' U = pure CU
+-- El on p. 389
 isType' other = check' VU other
 
 
