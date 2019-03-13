@@ -255,6 +255,18 @@ toplevel e =
      eN <- readBack (NThe tv val)
      return (CThe t eN)
 
+-- Implements Γ ⊢ x lookup ⤳ X
+findVar x None =
+  do loc <- currentLoc
+     failure [MText (T.pack "Unknown variable"), MVal (CVar x)]
+findVar x (ctx' :> (y, info))
+  -- LookupStop
+  | x == y =
+     pure (SThe (entryType info) (CVar x))
+  -- LookupPop
+  | otherwise = findVar x ctx'
+
+
 
 synth :: Expr -> Elab SynthResult
 synth e =
@@ -263,145 +275,177 @@ synth e =
      inExpr e (const (logInfo (ExprHasType t)))
      return res
 
-synth' (Tick x)
-  | T.all (\ch -> isLetter ch || isMark ch || ch == '-') (symbolName x) &&
-    T.length (symbolName x) > 0 =
-    pure (SThe VAtom (CTick x))
-  | otherwise =
-    failure [MText (T.pack "Atoms may contain only letters and hyphens")]
-synth' Atom = pure (SThe VU CAtom)
-synth' Zero = pure (SThe VNat CZero)
-synth' (Add1 n) =
-  do n' <- check VNat n
-     return (SThe VNat (CAdd1 n'))
-synth' (NatLit n)
-  | n <= 0 = synth' Zero
-  | otherwise =
-    do loc <- currentLoc
-       synth' (Add1 (Expr loc (NatLit (n - 1))))
-synth' (WhichNat tgt base step) =
-  do tgt' <- check VNat tgt
-     SThe bt base' <- synth base
-     btName <- fresh (sym "base-type")
-     k <- fresh (sym "k")
-     stepT <- evalInEnv (None :> (btName, bt)) (CPi k CNat (CVar btName))
-     step' <- check stepT step
-     bt' <- readBackType bt
-     return (SThe bt (CWhichNat tgt' bt' base' step'))
-synth' (IterNat tgt base step) =
-  do tgt' <- check VNat tgt
-     SThe bt base' <- synth base
-     btName <- fresh (sym "base-type")
-     soFar <- fresh (sym "so-far")
-     stepT <- evalInEnv
-                (None :> (btName, bt))
-                (CPi soFar (CVar btName) (CVar btName))
-     step' <- check stepT step
-     bt' <- readBackType bt
-     return (SThe bt (CIterNat tgt' bt' base' step'))
-synth' (RecNat tgt base step) =
-  do tgt' <- check VNat tgt
-     k <- fresh (sym "k")
-     SThe bt base' <- synth base
-     soFar <- fresh (sym "so-far")
-     btName <- fresh (sym "base-type")
-     stepT <- evalInEnv
-                (None :> (btName, bt))
-                (CPi k CNat
-                  (CPi soFar (CVar btName)
-                    (CVar btName)))
-     step' <- check stepT step
-     bt' <- readBackType bt
-     return (SThe bt (CRecNat tgt' bt' base' step'))
-synth' (IndNat tgt mot base step) =
-  do tgt' <- check VNat tgt
-     k <- fresh (sym "k")
-     mot' <- check (VPi k VNat (Closure None CU)) mot
-     motV <- eval mot'
-     baseT <- doApply motV VZero
-     base' <- check baseT base
-     soFar <- fresh (sym "so-far")
-     stepT <- let motName = Symbol (T.pack "mot")
-              in evalInEnv
-                   (None :> (motName, motV))
-                   (CPi k CNat
-                     (CPi soFar (CApp (CVar motName) (CVar k))
-                       (CApp (CVar motName) (CAdd1 (CVar k)))))
-     step' <- check stepT step
-     tgtV <- eval tgt'
-     ty <- doApply motV tgtV
-     return (SThe ty (CIndNat tgt' mot' base' step'))
-synth' Nat = pure (SThe VU CNat)
+-- The
+synth' (The ty e) =
+  do ty' <- isType ty
+     tv <- eval ty'
+     e' <- check tv e
+     return (SThe tv e')
+-- Hypothesis
 synth' (Var x) =
   do ctx <- getCtx
      x' <- applyRenaming x
      findVar x' ctx
-  where
-    findVar x' None =
-      do loc <- currentLoc
-         failure [MText (T.pack "Unknown variable"), MVal (CVar x)]
-    findVar x' (ctx' :> (y, info))
-      | x' == y =
-         pure (SThe (entryType info) (CVar x'))
-      | otherwise = findVar x' ctx'
-synth' (Arrow dom (t:|ts)) =
-  do x <- fresh (Symbol (T.pack "x"))
-     dom' <- check VU  dom
-     domVal <- eval dom'
-     ran' <- withCtxExtension x Nothing domVal $
-             case ts of
-               [] ->
-                 check VU t
-               (ty : tys) ->
-                 check' VU (Arrow t (ty :| tys))
-     return (SThe VU (CPi x dom' ran'))
-synth' (Pi ((loc, x, dom) :| doms) ran) =
-  do dom' <- check VU dom
-     domVal <- eval dom'
-     x' <- fresh x
-     ran' <- rename x x' $ withCtxExtension x' (Just loc) domVal $
-             case doms of
-               [] ->
-                 check VU ran
-               (y : ds) ->
-                 check' VU (Pi (y :| ds) ran)
-     return (SThe VU (CPi x' dom' ran'))
-synth' (Sigma ((loc, x, a) :| as) d) =
-  do a' <- check VU a
-     aVal <- eval a'
-     x' <- fresh x
-     d' <- withCtxExtension x (Just loc) aVal $
-             rename x x' $
-             case as of
-               [] ->
-                 check VU d
-               ((loc, y, d) : ds) ->
-                 check' VU (Pi ((loc, y, d) :| ds) d)
-     return (SThe VU (CSigma x a' d'))
-synth' (Pair a d) =
-  do a' <- check VU a
-     aVal <- eval a'
-     x <- fresh (sym "a")
-     d' <- withCtxExtension x Nothing aVal $ check VU d
-     return (SThe VU (CSigma x a' d'))
-synth' (Car p) =
-  do SThe ty p' <- synth p
+-- AtomI
+synth' (Tick sym)
+  | T.all (\ch -> isLetter ch || isMark ch || ch == '-') (symbolName sym) &&
+    T.length (symbolName sym) > 0 =
+    pure (SThe VAtom (CTick sym))
+  | otherwise =
+    failure [MText (T.pack "Atoms may contain only letters and hyphens")]
+-- ΣE-1
+synth' (Car pr) =
+  do SThe ty pr' <- synth pr
      case ty of
        VSigma x aT dT ->
-         return (SThe aT (CCar p'))
+         return (SThe aT (CCar pr'))
        other ->
          do ty <- readBackType other
             failure [MText (T.pack "Not a Σ: "), MVal ty]
-synth' (Cdr p) =
-  do SThe ty p' <- synth p
+-- ΣE-2
+synth' (Cdr pr) =
+  do SThe ty pr' <- synth pr
      case ty of
        VSigma x aT dT ->
-         do a <- eval p' >>= doCar
+         do a <- eval pr' >>= doCar
             dV <- instantiate dT x a
-            return (SThe dV (CCar p'))
+            return (SThe dV (CCdr pr'))
        other ->
          do ty <- readBackType other
             failure [MText (T.pack "Not a Σ: "), MVal ty]
+-- FunE-1 and FunE-2
+synth' (App f (arg1 :| args)) =
+  do (SThe fT f') <- synth f
+     checkArgs f' fT (arg1 :| args)
+
+  where
+    checkArgs fun (VPi x dom ran) (arg1 :| args) =
+      do arg1' <- check dom arg1
+         arg1v <- eval arg1'
+         exprTy <- instantiate ran x arg1v
+         case args of
+           -- Fun-E1
+           [] -> return (SThe exprTy (CApp fun arg1'))
+           -- Fun-E2
+           (r:rs) -> checkArgs (CApp fun arg1') exprTy (r :| rs)
+    checkArgs _ other _ =
+      do t <- readBackType other
+         failure [MText (T.pack "Not a Π type: "), MVal t]
+-- NatI-1
+synth' Zero = pure (SThe VNat CZero)
+-- NatI-2
+synth' (Add1 n) =
+  do n' <- check VNat n
+     return (SThe VNat (CAdd1 n'))
+-- NatI-3 and NatI-4
+synth' (NatLit n)
+  -- NatI-3
+  | n <= 0 = synth' Zero
+  -- NatI-4
+  | otherwise =
+    do loc <- currentLoc
+       synth' (Add1 (Expr loc (NatLit (n - 1))))
+-- NatE-1
+synth' (WhichNat tgt base step) =
+  do tgt' <- check VNat tgt
+     SThe bt base' <- synth base
+     stepT <- evalInEnv (None :> (sym "base-type", bt))
+                (CPi (sym "x") CNat
+                  (CVar (sym "base-type")))
+     step' <- check stepT step
+     bt' <- readBackType bt
+     return (SThe bt (CWhichNat tgt' bt' base' step'))
+-- NatE-2
+synth' (IterNat tgt base step) =
+  do tgt' <- check VNat tgt
+     SThe bt base' <- synth base
+     stepT <- evalInEnv
+                (None :> (sym "base-type", bt))
+                (CPi (sym "x") (CVar (sym "base-type")) (CVar (sym "base-type")))
+     step' <- check stepT step
+     bt' <- readBackType bt
+     return (SThe bt (CIterNat tgt' bt' base' step'))
+-- NatE-3
+synth' (RecNat tgt base step) =
+  do tgt' <- check VNat tgt
+     SThe bt base' <- synth base
+     stepT <- evalInEnv
+                (None :> (sym "base-type", bt))
+                (CPi (sym "n") CNat
+                  (CPi (sym "x") (CVar (sym "base-type"))
+                    (CVar (sym "base-type"))))
+     step' <- check stepT step
+     bt' <- readBackType bt
+     return (SThe bt (CRecNat tgt' bt' base' step'))
+-- NatE-4
+synth' (IndNat tgt mot base step) =
+  do tgt' <- check VNat tgt
+     mot' <- check (VPi (sym "x") VNat (Closure None CU)) mot
+     motV <- eval mot'
+     baseT <- doApply motV VZero
+     base' <- check baseT base
+     stepT <- evalInEnv (None :> (sym "mot", motV))
+                (CPi (sym "k") CNat
+                  (CPi (sym "almost") (CApp (CVar (sym "mot")) (CVar (sym "k")))
+                    (CApp (CVar (sym "mot")) (CAdd1 (CVar (sym "k"))))))
+     step' <- check stepT step
+     tgtV <- eval tgt'
+     ty <- doApply motV tgtV
+     return (SThe ty (CIndNat tgt' mot' base' step'))
+-- ListI-2
+synth' (ListCons e es) =
+  do SThe et e' <- synth e
+     es' <- check (VList et) es
+     return (SThe (VList et) (CListCons e' es'))
+-- ListE-1
+-- The mandatory "the" around the base in the book is represented by
+-- the extra argument to CRecList in this implementation.
+synth' (RecList tgt base step) =
+  do SThe lstT tgt' <- synth tgt
+     case lstT of
+       VList et ->
+         do (SThe bt base') <- synth base
+            stepT <- evalInEnv (None :> (sym "E", et) :> (sym "base-type", bt))
+                       (CPi (sym "e") (CVar (sym "E"))
+                         (CPi (sym "es") (CList (CVar (sym "E")))
+                           (CPi (sym "almost") (CVar (sym "base-type"))
+                             (CVar (sym "base-type")))))
+            step' <- check stepT step
+            bt' <- readBackType bt
+            return (SThe bt (CRecList tgt' bt' base' step'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not a List type: "), MVal t]
+-- TODO continue bringing harmony with TLT appendix B
+synth' (IndList tgt mot base step) =
+  do SThe lstT tgt' <- synth tgt
+     case lstT of
+       VList elem ->
+         do motT <- evalInEnv (None :> (sym "E", elem))
+                       (CPi (sym "es") (CList (CVar (sym "E"))) CU)
+            mot' <- check motT mot
+            motV <- eval mot'
+            baseT <- evalInEnv
+                       (None :> (sym "mot", motV))
+                       (CApp (CVar (sym "mot")) CListNil)
+            base' <- check baseT base
+            stepT <- evalInEnv
+                       (None :> (sym "E", elem) :> (sym "mot", motV))
+                       (CPi (sym "e") (CVar (sym "E"))
+                         (CPi (sym "es") (CList (CVar (sym "E")))
+                           (CPi (sym "so-far") (CApp (CVar (sym "mot"))
+                                                     (CVar (sym "es")))
+                             (CApp (CVar (sym "mot"))
+                                   (CListCons (CVar (sym "e"))
+                                              (CVar (sym "es")))))))
+            step' <- check stepT step
+            tgtV <- eval tgt'
+            ty <- doApply motV tgtV
+            return (SThe ty (CIndList tgt' mot' base' step'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not a List type: "), MVal t]
+
 synth' Trivial = return (SThe VU CTrivial)
 synth' Sole = return (SThe VTrivial CSole)
 synth' (Eq ty from to) =
@@ -454,78 +498,9 @@ synth' (Symm tgt) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Not an = type: "), MVal t]
-synth' (The ty e) =
-  do ty' <- isType ty
-     tv <- eval ty'
-     e' <- check tv e
-     return (SThe tv e')
-synth' (App rator (rand1 :| rands)) =
-  do (SThe ratorT rator') <- synth rator
-     checkArgs rator' ratorT (rand1 :| rands)
-
-  where
-    checkArgs fun (VPi x dom ran) (rand1 :| rands) =
-      do rand1' <- check dom rand1
-         rand1v <- eval rand1'
-         exprTy <- instantiate ran x rand1v
-         case rands of
-           [] -> return (SThe exprTy (CApp fun rand1'))
-           (r:rs) -> checkArgs (CApp fun rand1') exprTy (r :| rs)
-    checkArgs _ other _ =
-      do t <- readBackType other
-         failure [MText (T.pack "Not a Π type: "), MVal t]
 synth' (List elem) =
   do elem' <- check VU elem
      return (SThe VU (CList elem'))
-synth' (ListCons e es) =
-  do SThe t e' <- synth e
-     es' <- check (VList t) es
-     return (SThe (VList t) (CListCons e' es'))
-synth' (RecList tgt base step) =
-  do SThe lstT tgt' <- synth tgt
-     case lstT of
-       VList elem ->
-         do (SThe bt base') <- synth base
-            stepT <- evalInEnv
-                       (None :> (sym "E", elem) :> (sym "base-type", bt))
-                       (CPi (sym "e") (CVar (sym "E"))
-                         (CPi (sym "es") (CList (CVar (sym "E")))
-                           (CPi (sym "so-far") (CVar (sym "base-type"))
-                             (CVar (sym "base-type")))))
-            step' <- check stepT step
-            bt' <- readBackType bt
-            return (SThe bt (CRecList tgt' bt' base' step'))
-       other ->
-         do t <- readBackType other
-            failure [MText (T.pack "Not a List type: "), MVal t]
-synth' (IndList tgt mot base step) =
-  do SThe lstT tgt' <- synth tgt
-     case lstT of
-       VList elem ->
-         do motT <- evalInEnv (None :> (sym "E", elem))
-                       (CPi (sym "es") (CList (CVar (sym "E"))) CU)
-            mot' <- check motT mot
-            motV <- eval mot'
-            baseT <- evalInEnv
-                       (None :> (sym "mot", motV))
-                       (CApp (CVar (sym "mot")) CListNil)
-            base' <- check baseT base
-            stepT <- evalInEnv
-                       (None :> (sym "E", elem) :> (sym "mot", motV))
-                       (CPi (sym "e") (CVar (sym "E"))
-                         (CPi (sym "es") (CList (CVar (sym "E")))
-                           (CPi (sym "so-far") (CApp (CVar (sym "mot"))
-                                                     (CVar (sym "es")))
-                             (CApp (CVar (sym "mot"))
-                                   (CListCons (CVar (sym "e"))
-                                              (CVar (sym "es")))))))
-            step' <- check stepT step
-            tgtV <- eval tgt'
-            ty <- doApply motV tgtV
-            return (SThe ty (CIndList tgt' mot' base' step'))
-       other ->
-         do t <- readBackType other
-            failure [MText (T.pack "Not a List type: "), MVal t]
 synth' (Vec elem len) =
   SThe VU <$> (CVec <$> check VU elem <*> check VNat len)
 synth' (VecHead es) =
@@ -629,6 +604,50 @@ synth' (IndAbsurd tgt mot) =
      mot' <- check VU mot
      motv <- eval mot'
      return (SThe motv (CIndAbsurd tgt' mot'))
+-- UI-1
+synth' Atom = pure (SThe VU CAtom)
+synth' Nat = pure (SThe VU CNat)
+synth' (Arrow dom (t:|ts)) =
+  do x <- fresh (Symbol (T.pack "x"))
+     dom' <- check VU  dom
+     domVal <- eval dom'
+     ran' <- withCtxExtension x Nothing domVal $
+             case ts of
+               [] ->
+                 check VU t
+               (ty : tys) ->
+                 check' VU (Arrow t (ty :| tys))
+     return (SThe VU (CPi x dom' ran'))
+synth' (Pi ((loc, x, dom) :| doms) ran) =
+  do dom' <- check VU dom
+     domVal <- eval dom'
+     x' <- fresh x
+     ran' <- rename x x' $ withCtxExtension x' (Just loc) domVal $
+             case doms of
+               [] ->
+                 check VU ran
+               (y : ds) ->
+                 check' VU (Pi (y :| ds) ran)
+     return (SThe VU (CPi x' dom' ran'))
+synth' (Sigma ((loc, x, a) :| as) d) =
+  do a' <- check VU a
+     aVal <- eval a'
+     x' <- fresh x
+     d' <- withCtxExtension x (Just loc) aVal $
+             rename x x' $
+             case as of
+               [] ->
+                 check VU d
+               ((loc, y, d) : ds) ->
+                 check' VU (Pi ((loc, y, d) :| ds) d)
+     return (SThe VU (CSigma x a' d'))
+synth' (Pair a d) =
+  do a' <- check VU a
+     aVal <- eval a'
+     x <- fresh (sym "a")
+     d' <- withCtxExtension x Nothing aVal $ check VU d
+     return (SThe VU (CSigma x a' d'))
+
 synth' other =
   do loc <- currentLoc
      failure [ MText (T.pack "Can't synth")
@@ -641,6 +660,19 @@ check t e =
      tc <- readBackType t
      inExpr e (const (logInfo (ExprHasType tc)))
      return res
+
+-- ΣI
+check' t (Cons a d) =
+  case t of
+    VSigma x aT dT ->
+      do a' <- check aT a
+         av <- eval a'
+         dT' <- instantiate dT x av
+         d' <- check dT' d
+         return (CCons a' d')
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not a pair type"), MVal t']
 
 check' t (Lambda ((loc, x) :| xs) body) =
   case t of
@@ -660,17 +692,6 @@ check' t (Lambda ((loc, x) :| xs) body) =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not a function type"), MVal t']
-check' t (Cons a d) =
-  case t of
-    VSigma x aT dT ->
-      do a' <- check aT a
-         av <- eval a'
-         dT' <- instantiate dT x av
-         d' <- check dT' d
-         return (CCons a' d')
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not a pair type"), MVal t']
 check' t (Same e) =
   case t of
     VEq ty from to ->

@@ -22,7 +22,9 @@ tests = testGroup "Pie tests" [freshNames, alpha, normTests, testTick, parsingSo
 
 normTests =
   testGroup "Normalization"
-    [ testCase (abbrev input ++ " has normal form " ++ abbrev normal) (hasNorm input normal)
+    [ testCase
+        (abbrev input ++ " has normal form " ++ abbrev normal)
+        (hasNorm input normal)
     | (input, normal) <-
         -- Base types
         [ ("(the Trivial sole)", "sole")
@@ -40,6 +42,71 @@ normTests =
           )
         , ( "(the (-> (-> Nat Nat) (-> Nat Nat)) (lambda (x) x))"
           , "(the (-> (-> Nat Nat) (-> Nat Nat)) (lambda (f) (lambda (x) (f x))))"
+          )
+          -- which-Nat
+        , ( "(which-Nat zero 't (lambda (x) 'nil))", "(the Atom 't)")
+        , ( "(which-Nat 13 't (lambda (x) 'nil))", "(the Atom 'nil)")
+        , ( "(the (-> Nat Atom) (lambda (n) (which-Nat n 't (lambda (x) 'nil))))"
+          , "(the (-> Nat Atom) (lambda (n) (which-Nat n 't (lambda (x) 'nil))))"
+          )
+          -- iter-Nat
+        , ( "(iter-Nat zero 3 (lambda (x) (add1 x)))"
+          , "(the Nat 3)"
+          )
+        , ( "(iter-Nat 2 3 (lambda (x) (add1 x)))"
+          , "(the Nat 5)"
+          )
+        , ( "(the (-> Nat Nat Nat) (lambda (j k) (iter-Nat j k (lambda (x) (add1 x)))))"
+          , "(the (-> Nat Nat Nat) (lambda (j k) (iter-Nat j k (lambda (x) (add1 x)))))"
+          )
+          -- rec-Nat
+        , ( "(rec-Nat zero (the (List Nat) nil) (lambda (n-1 almost) (:: n-1 almost)))"
+          , "(the (List Nat) nil)"
+          )
+        , ( "(rec-Nat 3 (the (List Nat) nil) (lambda (n-1 almost) (:: n-1 almost)))"
+          , "(the (List Nat) (:: 2 (:: 1 (:: 0 nil))))"
+          )
+        , ( "(the (-> Nat (List Nat)) (lambda (n) (rec-Nat n (the (List Nat) nil) (lambda (n-1 almost) (:: n-1 almost)))))"
+          , "(the (-> Nat (List Nat)) (lambda (n) (rec-Nat n (the (List Nat) nil) (lambda (n-1 almost) (:: n-1 almost)))))"
+          )
+          -- ind-Nat
+        , ( "(ind-Nat zero (lambda (k) (Vec Nat k)) vecnil (lambda (n-1 almost) (vec:: n-1 almost)))"
+          , "(the (Vec Nat 0) vecnil)"
+          )
+        , ( "(ind-Nat 2 (lambda (k) (Vec Nat k)) vecnil (lambda (n-1 almost) (vec:: n-1 almost)))"
+          , "(the (Vec Nat 2) (vec:: 1 (vec:: 0 vecnil)))"
+          )
+        , ( "(the (Pi ((n Nat)) (Vec Nat n)) (lambda (j) (ind-Nat j (lambda (k) (Vec Nat k)) vecnil (lambda (n-1 almost) (vec:: n-1 almost)))))"
+          , "(the (Pi ((n Nat)) (Vec Nat n)) (lambda (j) (ind-Nat j (lambda (k) (Vec Nat k)) vecnil (lambda (n-1 almost) (vec:: n-1 almost)))))"
+          )
+          -- Σ: car and cdr
+        , ( "(the (-> (Sigma ((x Atom)) (= Atom x 'syltetøj)) Atom) (lambda (p) (car p)))"
+          , "(the (-> (Sigma ((x Atom)) (= Atom x 'syltetøj)) Atom) (lambda (p) (car p)))"
+          )
+        , ( "(car (the (Pair Nat Nat) (cons 2 3)))", "2")
+        , ( "(cdr (the (Pair Nat Nat) (cons 2 3)))", "3")
+        , ( "(the (Pi ((p (Sigma ((x Atom)) (= Atom x 'syltetøj)))) (= Atom (car p) 'syltetøj)) (lambda (p) (cdr p)))"
+          , "(the (Pi ((p (Sigma ((x Atom)) (= Atom x 'syltetøj)))) (= Atom (car p) 'syltetøj)) (lambda (p) (cdr p)))"
+          )
+          -- Σ: η-expansion
+        , ( "(the (-> (Pair Trivial Nat) (Pair Trivial Nat)) (lambda (x) x))"
+          , "(the (-> (Pair Trivial Nat) (Pair Trivial Nat)) (lambda (x) (cons sole (cdr x))))"
+          )
+          -- Trivial
+        , ( "(the Trivial sole)", "(the Trivial sole)")
+        , ( "(the (Pi ((t1 Trivial) (t2 Trivial)) (= Trivial t1 t2)) (lambda (t1 t2) (same t1)))"
+          , "(the (Pi ((t1 Trivial) (t2 Trivial)) (= Trivial t1 t2)) (lambda (t1 t2) (same sole)))"
+          )
+          -- Equality
+        , ( "(the (= Nat 0 0) (same 0))", "(the (= Nat 0 0) (same 0))")
+        , ( "(the (Pi ((n Nat)) (-> (= Nat n 0) (= Nat 0 n))) (lambda (n eq) (symm eq)))"
+          , "(the (Pi ((n Nat)) (-> (= Nat n 0) (= Nat 0 n))) (lambda (n eq) (symm eq)))"
+          )
+        , ( "(the (Pi ((j Nat) (n Nat)) (-> (= Nat n j) (= Nat j n))) (lambda (j n eq) (replace eq (lambda (k) (= Nat k n)) (same n))))"
+          , "(the (Pi ((j Nat) (n Nat)) (-> (= Nat n j) (= Nat j n))) (lambda (j n eq) (replace eq (lambda (k) (= Nat k n)) (same n))))"
+          )
+        , ( "((the (Pi ((j Nat) (n Nat)) (-> (= Nat n j) (= Nat j n))) (lambda (j n eq) (replace eq (lambda (k) (= Nat k n)) (same n)))) 0 0 (same 0))"
+          , "(the (= Nat 0 0) (same 0))"
           )
         ]
     ]
