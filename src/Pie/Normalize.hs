@@ -1,5 +1,6 @@
 module Pie.Normalize where
 
+import Pie.AlphaEquiv
 import Pie.Fresh
 import Pie.Panic
 import Pie.Types
@@ -292,13 +293,13 @@ doIndList tgt@(VNeu (VList t) ne) mot base step =
 
 doReplace :: Value -> Value -> Value -> Norm Value
 doReplace (VSame v) mot base = return base
-doReplace (VNeu (VEq ty from to) ne) mot base =
+doReplace (VNeu (VEq a from to) ne) mot base =
   do ty <- doApply mot to
-     x <- fresh (sym "x")
      baseT <- doApply mot from
-     return (VNeu ty (NReplace ne
-                       (NThe (VPi x ty (Closure None CU)) mot)
-                       (NThe baseT base)))
+     return (VNeu ty
+             (NReplace ne
+               (NThe (VPi (sym "x") a (Closure None CU)) mot)
+               (NThe baseT base)))
 
 doTrans :: Value -> Value -> Norm Value
 doTrans (VSame v) (VSame _) = return (VSame v)
@@ -445,7 +446,14 @@ readBack (NThe (VEither lt _) (VLeft l)) = CLeft <$> readBack (NThe lt l)
 readBack (NThe (VEither _ rt) (VRight r)) = CRight <$> readBack (NThe rt r)
 readBack (NThe VAbsurd (VNeu _ ne)) = CThe CAbsurd <$> readBackNeutral ne
 readBack (NThe VU t) = readBackType t
-readBack (NThe t (VNeu t' neu)) = readBackNeutral neu
+readBack (NThe t (VNeu t' neu)) =
+  do t1 <- readBackType t
+     t2 <- readBackType t'
+     case alphaEquiv t1 t2 of
+       Left _ ->
+         panic $ "Mismatched types in readBack neutral case!\n\t" ++
+                 show t1 ++ "\nand\n\t" ++ show t2
+       Right () -> readBackNeutral neu
 readBack other = error (show other)
 
 readBackType :: Value -> Norm Core

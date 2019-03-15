@@ -280,7 +280,7 @@ synth' (The ty e) =
   do ty' <- isType ty
      tv <- eval ty'
      e' <- check tv e
-     return (SThe tv e')
+     return (SThe tv (CThe ty' e'))
 -- Hypothesis
 synth' (Var x) =
   do ctx <- getCtx
@@ -498,6 +498,22 @@ synth' (Symm tgt) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Not an = type: "), MVal t]
+synth' (Trans p1 p2) =
+  do SThe t1 p1' <- synth p1
+     SThe t2 p2' <- synth p2
+     case t1 of
+       VEq a from mid ->
+         case t2 of
+           VEq b mid' to ->
+             do sameType a b
+                same a mid mid'
+                return (SThe (VEq a from to) (CTrans p1' p2'))
+           other2 ->
+             do notEq <- readBackType other2
+                failure [ MText (T.pack "Not an = type: "), MVal notEq]
+       other1 ->
+         do notEq <- readBackType other1
+            failure [ MText (T.pack "Not an = type: "), MVal notEq]
 synth' (List elem) =
   do elem' <- check VU elem
      return (SThe VU (CList elem'))

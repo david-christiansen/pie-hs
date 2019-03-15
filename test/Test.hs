@@ -21,10 +21,10 @@ tests = testGroup "Pie tests" [freshNames, alpha, normTests, testTick, parsingSo
 
 
 normTests =
-  testGroup "Normalization"
+  testGroup "Normalization/Sameness"
     [ testCase
-        (abbrev input ++ " has normal form " ++ abbrev normal)
-        (hasNorm input normal)
+        (abbrev input ++ " is the same as " ++ abbrev normal)
+        (areSame input normal)
     | (input, normal) <-
         -- Base types
         [ ("(the Trivial sole)", "sole")
@@ -43,6 +43,11 @@ normTests =
         , ( "(the (-> (-> Nat Nat) (-> Nat Nat)) (lambda (x) x))"
           , "(the (-> (-> Nat Nat) (-> Nat Nat)) (lambda (f) (lambda (x) (f x))))"
           )
+          -- Pi
+        , ( "(the (-> (-> Nat Nat) Nat Nat) (lambda (f x) (f x)))"
+          , "(the (-> (-> Nat Nat) Nat Nat) (lambda (f x) (f x)))"
+          )
+
           -- which-Nat
         , ( "(which-Nat zero 't (lambda (x) 'nil))", "(the Atom 't)")
         , ( "(which-Nat 13 't (lambda (x) 'nil))", "(the Atom 'nil)")
@@ -108,10 +113,57 @@ normTests =
         , ( "((the (Pi ((j Nat) (n Nat)) (-> (= Nat n j) (= Nat j n))) (lambda (j n eq) (replace eq (lambda (k) (= Nat k n)) (same n)))) 0 0 (same 0))"
           , "(the (= Nat 0 0) (same 0))"
           )
+        , ( "(the (Pi ((i Nat) (j Nat) (k Nat)) (-> (= Nat i j) (= Nat j k) (= Nat i k))) (lambda (i j k a b) (trans a b)))"
+          , "(the (Pi ((i Nat) (j Nat) (k Nat)) (-> (= Nat i j) (= Nat j k) (= Nat i k))) (lambda (i j k a b) (trans a b)))"
+          )
+        , ( "(trans (the (= Nat 2 2) (same 2)) (the (= Nat 2 2) (same 2)))"
+          , "(the (= Nat 2 2) (same 2))"
+          )
+        , ( "(the (-> (= Nat 0 0) (= Nat 0 0)) (lambda (eq1) (trans eq1 (the (= Nat 0 0) (same 0)))))"
+          , "(the (-> (= Nat 0 0) (= Nat 0 0)) (lambda (eq1) (trans eq1 (the (= Nat 0 0) (same 0)))))"
+          )
+        , ( "(the (-> (= Nat 0 0) (= Nat 0 0)) (lambda (eq1) (trans (the (= Nat 0 0) (same 0)) eq1)))"
+          , "(the (-> (= Nat 0 0) (= Nat 0 0)) (lambda (eq1) (trans (the (= Nat 0 0) (same 0)) eq1)))"
+          )
+        , ( "(the (Pi ((j Nat) (k Nat) (f (-> Nat Atom))) (-> (= Nat j k) (= Atom (f j) (f k)))) (lambda (j k f eq) (cong eq f)))"
+          , "(the (Pi ((j Nat) (k Nat) (f (-> Nat Atom))) (-> (= Nat j k) (= Atom (f j) (f k)))) (lambda (j k f eq) (cong eq f)))"
+          )
+        , ( "(rec-List (the (List Atom) nil) 0 (lambda (_ _ l) (add1 l)))"
+          , "(the Nat 0)"
+          )
+        , ( "(rec-List (the (List Atom) (:: 'a (:: 'b nil))) 0 (lambda (_ _ l) (add1 l)))"
+          , "(the Nat 2)"
+          )
+        , ( "(the (Pi ((E U)) (-> (List E) Nat)) (lambda (E es) (rec-List es 0 (lambda (_ _ l) (add1 l)))))"
+          , "(the (Pi ((E U)) (-> (List E) Nat)) (lambda (E es) (rec-List es 0 (lambda (_ _ l) (add1 l)))))"
+          )
+        , ( "(the (Pi ((P U) (S U)) (-> (Either P S) (Either S P))) (lambda (P S x) (ind-Either x (lambda (ig) (Either S P)) (lambda (l) (right l)) (lambda (r) (left r)))))"
+          , "(the (Pi ((P U) (S U)) (-> (Either P S) (Either S P))) (lambda (P S x) (ind-Either x (lambda (ig) (Either S P)) (lambda (l) (right l)) (lambda (r) (left r)))))"
+          )
+        , ( "(the (-> Absurd (= Nat 1 2)) (lambda (x) (ind-Absurd x (= Nat 1 2))))"
+          , "(the (-> Absurd (= Nat 1 2)) (lambda (x) (ind-Absurd (the Absurd x) (= Nat 1 2))))"
+          )
+        , ( "(the (Pi ((len Nat)) (-> (Vec Atom (add1 (add1 (add1 len)))) Atom)) (lambda (len es) (head (tail (tail es)))))"
+          , "(the (Pi ((len Nat)) (-> (Vec Atom (add1 (add1 (add1 len)))) Atom)) (lambda (len es) (head (tail (tail es)))))"
+          )
+        , ( "(the (Pi ((len Nat) (es (Vec Atom len))) (= (Vec Atom (add1 len)) (vec:: 'prickly-pear es) (vec:: 'prickly-pear es))) (lambda (len es) (ind-Vec len es (lambda (k xs) (= (Vec Atom (add1 k)) (vec:: 'prickly-pear xs) (vec:: 'prickly-pear xs))) (same (vec:: 'prickly-pear vecnil)) (lambda (k x xs so-far) (same (vec:: 'prickly-pear (vec:: x xs)))))))"
+          , "(the (Pi ((len Nat) (es (Vec Atom len))) (= (Vec Atom (add1 len)) (vec:: 'prickly-pear es) (vec:: 'prickly-pear es))) (lambda (len es) (ind-Vec len es (lambda (k xs) (= (Vec Atom (add1 k)) (vec:: 'prickly-pear xs) (vec:: 'prickly-pear xs))) (same (vec:: 'prickly-pear vecnil)) (lambda (k x xs so-far) (same (vec:: 'prickly-pear (vec:: x xs)))))))"
+          )
+          -- ind-List
+        , ( "(the (Pi ((E U) (es (List E))) (= (List E) es (rec-List es (the (List E) nil) (lambda (x xs so-far) (:: x so-far))))) (lambda (E es) (ind-List es (lambda (xs) (= (List E) xs (rec-List xs (the (List E) nil) (lambda (y ys so-far) (:: y so-far))))) (same nil) (lambda (x xs so-far) (cong so-far (the (-> (List E) (List E)) (lambda (tl) (:: x tl))))))))"
+          , "(the (Pi ((E U) (es (List E))) (= (List E) es (rec-List es (the (List E) nil) (lambda (x xs so-far) (:: x so-far))))) (lambda (E es) (ind-List es (lambda (xs) (= (List E) xs (rec-List xs (the (List E) nil) (lambda (y ys so-far) (:: y so-far))))) (same nil) (lambda (x xs so-far) (cong so-far (the (-> (List E) (List E)) (lambda (tl) (:: x tl))))))))"
+          )
+        , ( "((the (Pi ((E U) (es (List E))) (= (List E) es (rec-List es (the (List E) nil) (lambda (x xs so-far) (:: x so-far))))) (lambda (E es) (ind-List es (lambda (xs) (= (List E) xs (rec-List xs (the (List E) nil) (lambda (y ys so-far) (:: y so-far))))) (same nil) (lambda (x xs so-far) (cong so-far (the (-> (List E) (List E)) (lambda (tl) (:: x tl)))))))) Atom nil)"
+          , "(the (= (List Atom) nil nil) (same nil))"
+          )
+        , ( "((the (Pi ((E U) (es (List E))) (= (List E) es (rec-List es (the (List E) nil) (lambda (x xs so-far) (:: x so-far))))) (lambda (E es) (ind-List es (lambda (xs) (= (List E) xs (rec-List xs (the (List E) nil) (lambda (y ys so-far) (:: y so-far))))) (same nil) (lambda (x xs so-far) (cong so-far (the (-> (List E) (List E)) (lambda (tl) (:: x tl)))))))) Atom (:: 'kanelsnegl nil))"
+          , "(the (= (List Atom) (:: 'kanelsnegl nil) (:: 'kanelsnegl nil)) (same (:: 'kanelsnegl nil)))"
+          )
+
         ]
     ]
 
-abbrev txt = if length txt >= 30 then take 29 txt ++ "…" else txt
+abbrev txt = if length txt >= 40 then take 39 txt ++ "…" else txt
 
 
 freshNames =
@@ -301,17 +353,16 @@ mustBeAlphaEquiv c1 c2 = mustSucceed (alphaEquiv c1 c2)
 norm :: N.Norm a -> a
 norm act = N.runNorm act [] None
 
-hasNorm ::
+areSame ::
   String {- ^ The input expression -} ->
   String {- ^ The supposed normal form -} ->
   Assertion
-hasNorm input normal =
+areSame input normal =
   do normStx <- mustParseExpr normal
      inputStx <- mustParseExpr input
      (E.SThe ty1 normCore) <- mustElab (E.synth normStx)
      (E.SThe ty2 inputCore) <- mustElab (E.synth inputStx)
      mustElab (E.sameType ty1 ty2)
-     let newNorm = norm $
-                   do v <- N.eval inputCore
-                      N.readBack (NThe ty1 v)
-     mustBeAlphaEquiv normCore newNorm
+     let v1 = norm (N.eval normCore)
+     let v2 = norm (N.eval inputCore)
+     mustElab (E.same ty1 v1 v2)

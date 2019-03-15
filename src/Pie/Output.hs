@@ -110,7 +110,7 @@ addLambda x other = Lambda (((), x) :| []) (Expr () other)
 resugar :: Core -> (OutExpr, [Symbol])
 resugar (CTick x) = resugar0 (Tick x)
 resugar CAtom = resugar0 Atom
-resugar CZero = resugar0 Zero
+resugar CZero = resugar0 (NatLit 0)
 resugar (CAdd1 k) =
   case resugar k of
     (Expr () Zero, _) -> (Expr () (NatLit 1), [])
@@ -246,6 +246,7 @@ tiny (Expr () e) = tiny' e
     tiny' Atom = True
     tiny' Nat = True
     tiny' U = True
+    tiny' (Var _) = True
     tiny' _ = False
 
 elim1 name tgt methods =
@@ -370,7 +371,7 @@ pp' (Eq t from to)
   | all tiny [t, from, to] =
     parens (hsep [out "=", pp t, pp from, pp to])
   | otherwise =
-    parens (vsep [out "=", pp t, pp from, pp to])
+    parens (vsep [do out "=" *> space *> pp t, pp from, pp to])
 pp' (Same e) = form "same" [e]
 pp' (Replace tgt mot base) =
   elim1 "replace" tgt [mot, base]
@@ -419,7 +420,10 @@ indentTextBlock i txt =
 
 printInfo :: ElabInfo -> Text
 printInfo (ExprHasType c) =
-  T.pack "Has type " <> execOutput (pp (fst (resugar c)))
+  let expr = fst (resugar c)
+      str = execOutput (pp expr)
+  in T.pack "Has type " <>
+     if tiny expr then str else indentTextBlock 2 str
 printInfo ExprIsType = T.pack "A type"
 printInfo (ExprWillHaveType c) =
   T.pack "Will have type " <> execOutput (pp (fst (resugar c)))
