@@ -539,7 +539,18 @@ printParseErr input (Positioned pos@(Pos l c) e) =
   , highlightPos input pos
   , case e of
       GenericParseErr -> T.empty
-      ExpectedChar c -> T.pack "Expected character " <> T.pack (show c)
-      Expected what -> T.pack "Expected " <> what
+      Expected cs ds ->
+        T.pack "Expected " <>
+        (case cs of
+           [] -> T.empty
+           [c] -> T.pack ("the character " ++ show c)
+           _ -> T.pack ("one of " ++ concat (intersperse ", " (show <$> cs)))) <>
+        (case (cs, ds) of
+           ((_:_), (_:_)) -> T.pack " or "
+           _ -> mempty) <>
+        (case ds of
+           [] -> mempty
+           [d] -> d
+           _ -> T.intercalate (T.pack " or ") ds)
       EOF -> T.pack "end of input"
   ]

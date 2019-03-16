@@ -5,6 +5,7 @@ module Pie.Parse where
 import Control.Applicative
 import Data.Char
 import Data.Foldable
+import Data.List (nub)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
@@ -14,11 +15,20 @@ import qualified Data.Text.ICU as ICU
 import Pie.Types
 
 data ParseErr = GenericParseErr
-              | ExpectedChar Char
-              | Expected Text
+              | Expected [Char] [Text]
               | EOF
   deriving Show
 
+expectedChar c = Expected [c] []
+expectedDesc d = Expected [] [d]
+
+mergeErrors :: ParseErr -> ParseErr -> ParseErr
+mergeErrors GenericParseErr e = e
+mergeErrors e GenericParseErr = e
+mergeErrors EOF e = e
+mergeErrors e EOF = e
+mergeErrors (Expected cs1 descs1) (Expected cs2 descs2) =
+  Expected (nub (cs1 ++ cs2)) (nub (descs1 ++ descs2))
 
 data ParserContext =
   ParserContext
@@ -70,8 +80,11 @@ instance Alternative Parser where
                     Right ans -> Right ans
                 Right ans -> Right ans)
     where
-      furthest e1@(Positioned p1 _) e2@(Positioned p2 _) =
-        if p1 > p2 then e1 else e2
+      furthest e1@(Positioned p1 e1') e2@(Positioned p2 e2') =
+        case compare p1 p2 of
+          LT -> e2
+          GT -> e1
+          EQ -> Positioned p1 (mergeErrors e1' e2')
 
 instance Monad Parser where
   return = pure
@@ -132,7 +145,7 @@ char =
 litChar :: Char -> Parser ()
 litChar c =
   do c' <- char
-     if c == c' then pure () else failure (ExpectedChar c)
+     if c == c' then pure () else failure (expectedChar c)
 
 rep :: Parser a -> Parser [a]
 rep p = ((:) <$> p <*> (rep p)) <|> pure []
@@ -150,13 +163,13 @@ located p =
      endPos <- currentPos <$> get
      return (Located (Loc file startPos endPos) res)
 
-string :: String -> Parser ()
-string [] = pure ()
+string :: String -> Parser String
+string [] = pure ""
 string (c:cs) =
   do c' <- char
      if c /= c'
-       then failure (ExpectedChar c)
-       else string cs
+       then failure (expectedChar c)
+       else (c :) <$> string cs
 
 forwardText :: Pos -> Text -> Pos
 forwardText (Pos l c) txt =
@@ -178,7 +191,7 @@ regex :: Text -> [Char] -> Parser Text
 regex name rx =
   do input <- currentInput <$> get
      case (ICU.find theRegex input) >>= ICU.group 0  of
-       Nothing -> failure (Expected name)
+       Nothing -> failure (expectedDesc name)
        Just matching ->
          do let rest = T.drop (T.length matching) input
             modify (\st -> st { currentInput = rest
@@ -192,13 +205,43 @@ hashLang :: Parser ()
 hashLang = regex (T.pack "language identification") "#lang pie" *> spacing
 
 
--- | The identifier rules from R6RS Scheme
+-- | The identifier rules from R6RS Scheme, minus hex escapes
 ident :: Parser Text
-ident = regex (T.pack "identifier")
-          ("\\A(?:(?:" ++ initial ++ "(?:" ++ subsequent ++ ")*+)|\\+|\\.\\.\\.)")
+ident =
+  normalIdent <|> specialIdent
 
-initial = "[\\p{L}\\p{Lu}\\p{Ll}\\p{Lt}\\p{Lm}\\p{Lo}\\p{Mn}\\p{Nl}\\p{No}\\p{Pd}\\p{Pc}\\p{Po}\\p{Sc}\\p{Sm}\\p{Sk}\\p{So}\\p{Co}!$%&*/:<=>?_~^]"
-subsequent = initial ++ "|(?:[0-9₀₁₂₃₄₅₆₇₈₉]|[\\p{Nd}\\p{Mc}\\p{Me}]|\\+|\\.|@)"
+  where
+    normalIdent =
+      do c1 <- init
+         cs <- rep subseq
+         return (T.pack (c1 : cs))
+
+    specialIdent =
+      do str <- string "+" <|> string "-" <|> string "..."
+         more <- rep subseq
+         return (T.pack (str ++ more))
+
+    init =
+      do c <- char
+         if isConstituent c || isSpecialInit c
+           then return c
+           else failure (expectedDesc (T.pack "identifier-initial character"))
+    subseq =
+      do c <- char
+         if isConstituent c || isSpecialInit c || isDigit c || generalCategory c `elem` subseqCats || c `elem` "+-.@"
+           then return c
+           else failure (expectedDesc (T.pack "identifier subsequent character"))
+    isConstituent c =
+      c `elem` alphabet ||
+      c `elem` (map toUpper alphabet) ||
+      (ord c > 126 && generalCategory c `elem` constituentCats)
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    isSpecialInit c = c `elem` "!$%&*/:<=>?^_~"
+
+    constituentCats = [UppercaseLetter, LowercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, NonSpacingMark, LetterNumber, OtherNumber, DashPunctuation, ConnectorPunctuation, OtherPunctuation, CurrencySymbol, MathSymbol, ModifierSymbol, OtherSymbol, PrivateUse]
+
+    subseqCats = [DecimalNumber, SpacingCombiningMark, EnclosingMark]
+
 
 token :: Parser a -> Parser (Located a)
 token p = located p <* spacing
@@ -207,7 +250,7 @@ varName =
   token $
   do x <- Symbol <$> ident
      if x `elem` pieKeywords
-       then failure (Expected (T.pack "valid name"))
+       then failure (expectedDesc (T.pack "valid name"))
        else return x
 
 kw k = token $ do x <- ident

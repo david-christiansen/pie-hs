@@ -282,7 +282,7 @@ type Env a = Bwd (Symbol, a)
 
 
 data MessagePart a = MText Text | MVal a
-  deriving Show
+  deriving (Eq, Show)
 
 data ElabInfo = ExprHasType Core
               | ExprIsType
@@ -295,4 +295,4 @@ data ElabInfo = ExprHasType Core
 
 
 newtype ElabErr = ElabErr (Located [MessagePart Core])
-  deriving Show
+  deriving (Eq, Show)

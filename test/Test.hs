@@ -17,8 +17,25 @@ import qualified Pie.Parse as P
 
 main = defaultMain tests
 
-tests = testGroup "Pie tests" [freshNames, alpha, normTests, testTick, parsingSourceLocs]
+tests =
+  testGroup "Pie tests"
+    [freshNames, alpha, normTests, testTick, parsingSourceLocs, errorTests]
 
+errorTests =
+  testGroup "Error messages"
+    [ testCase tm (nope tm msg)
+    | (tm, msg) <-
+        [ ( "'f00d"
+          , ElabErr (Located (Loc "<test input>" (Pos 1 1) (Pos 1 6))
+                      [MText (T.pack "Atoms may contain only letters and hyphens")])
+          )
+        ]
+    ]
+  where
+    nope :: String -> ElabErr -> Assertion
+    nope tm msg =
+      do e <- mustParseExpr tm
+         mustNotElabWith (== msg) (E.synth e)
 
 normTests =
   testGroup "Normalization/Sameness"
@@ -328,8 +345,8 @@ mustSucceed (Right x) = return x
 mustFail ::
   Show a =>
   Either e a ->
-  IO ()
-mustFail (Left e) = return ()
+  IO e
+mustFail (Left e) = return e
 mustFail (Right x) =
   assertFailure ("Expected failure, but succeeded with " ++ show x)
 
@@ -347,7 +364,15 @@ mustElab act =
 
 mustNotElab :: Show a => E.Elab a -> IO ()
 mustNotElab act =
-  mustFail (snd (E.runElab act None (Loc "<test suite>" (Pos 1 1) (Pos 1 1)) []))
+  mustFail (snd (E.runElab act None (Loc "<test suite>" (Pos 1 1) (Pos 1 1)) [])) *>
+  return ()
+
+mustNotElabWith :: Show a => (ElabErr -> Bool) -> E.Elab a -> IO ()
+mustNotElabWith pred act =
+  do e <- mustFail (snd (E.runElab act None (Loc "<test suite>" (Pos 1 1) (Pos 1 1)) []))
+     if pred e
+       then return ()
+       else assertFailure (show e ++ " was not the expected error")
 
 
 
