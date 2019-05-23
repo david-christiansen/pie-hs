@@ -260,10 +260,10 @@ findVar x None =
   do loc <- currentLoc
      failure [MText (T.pack "Unknown variable"), MVal (CVar x)]
 findVar x (ctx' :> (y, info))
-  -- LookupStop
+  -- LookupStop on p. 370
   | x == y =
      pure (SThe (entryType info) (CVar x))
-  -- LookupPop
+  -- LookupPop on p. 370
   | otherwise = findVar x ctx'
 
 
@@ -275,25 +275,25 @@ synth e =
      inExpr e (const (logInfo (ExprHasType t)))
      return res
 
--- The
+-- The on p. 367
 synth' (The ty e) =
   do ty' <- isType ty
      tv <- eval ty'
      e' <- check tv e
      return (SThe tv (CThe ty' e'))
--- Hypothesis
+-- Hypothesis on p. 370
 synth' (Var x) =
   do ctx <- getCtx
      x' <- applyRenaming x
      findVar x' ctx
--- AtomI
+-- AtomI on p. 371
 synth' (Tick sym)
   | T.all (\ch -> isLetter ch || isMark ch || ch == '-') (symbolName sym) &&
     T.length (symbolName sym) > 0 =
     pure (SThe VAtom (CTick sym))
   | otherwise =
     failure [MText (T.pack "Atoms may contain only letters and hyphens")]
--- ΣE-1
+-- ΣE-1 on p. 372
 synth' (Car pr) =
   do SThe ty pr' <- synth pr
      case ty of
@@ -302,7 +302,7 @@ synth' (Car pr) =
        other ->
          do ty <- readBackType other
             failure [MText (T.pack "Not a Σ: "), MVal ty]
--- ΣE-2
+-- ΣE-2 on p. 372
 synth' (Cdr pr) =
   do SThe ty pr' <- synth pr
      case ty of
@@ -313,7 +313,7 @@ synth' (Cdr pr) =
        other ->
          do ty <- readBackType other
             failure [MText (T.pack "Not a Σ: "), MVal ty]
--- FunE-1 and FunE-2
+-- FunE-1 and FunE-2 on p. 374
 synth' (App f (arg1 :| args)) =
   do (SThe fT f') <- synth f
      checkArgs f' fT (arg1 :| args)
@@ -331,13 +331,13 @@ synth' (App f (arg1 :| args)) =
     checkArgs _ other _ =
       do t <- readBackType other
          failure [MText (T.pack "Not a Π type: "), MVal t]
--- NatI-1
+-- NatI-1 on p. 374
 synth' Zero = pure (SThe VNat CZero)
--- NatI-2
+-- NatI-2 on p. 375
 synth' (Add1 n) =
   do n' <- check VNat n
      return (SThe VNat (CAdd1 n'))
--- NatI-3 and NatI-4
+-- NatI-3 and NatI-4 on p. 375
 synth' (NatLit n)
   -- NatI-3
   | n <= 0 = synth' Zero
@@ -345,7 +345,7 @@ synth' (NatLit n)
   | otherwise =
     do loc <- currentLoc
        synth' (Add1 (Expr loc (NatLit (n - 1))))
--- NatE-1
+-- NatE-1 on p. 375
 synth' (WhichNat tgt base step) =
   do tgt' <- check VNat tgt
      SThe bt base' <- synth base
@@ -355,7 +355,7 @@ synth' (WhichNat tgt base step) =
      step' <- check stepT step
      bt' <- readBackType bt
      return (SThe bt (CWhichNat tgt' bt' base' step'))
--- NatE-2
+-- NatE-2 on p. 376
 synth' (IterNat tgt base step) =
   do tgt' <- check VNat tgt
      SThe bt base' <- synth base
@@ -365,7 +365,7 @@ synth' (IterNat tgt base step) =
      step' <- check stepT step
      bt' <- readBackType bt
      return (SThe bt (CIterNat tgt' bt' base' step'))
--- NatE-3
+-- NatE-3 on p. 376
 synth' (RecNat tgt base step) =
   do tgt' <- check VNat tgt
      SThe bt base' <- synth base
@@ -377,7 +377,7 @@ synth' (RecNat tgt base step) =
      step' <- check stepT step
      bt' <- readBackType bt
      return (SThe bt (CRecNat tgt' bt' base' step'))
--- NatE-4
+-- NatE-4 on p. 377
 synth' (IndNat tgt mot base step) =
   do tgt' <- check VNat tgt
      mot' <- check (VPi (sym "x") VNat (Closure None CU)) mot
@@ -392,12 +392,12 @@ synth' (IndNat tgt mot base step) =
      tgtV <- eval tgt'
      ty <- doApply motV tgtV
      return (SThe ty (CIndNat tgt' mot' base' step'))
--- ListI-2
+-- ListI-2 on p. 378
 synth' (ListCons e es) =
   do SThe et e' <- synth e
      es' <- check (VList et) es
      return (SThe (VList et) (CListCons e' es'))
--- ListE-1
+-- ListE-1 on p. 379
 -- The mandatory "the" around the base in the book is represented by
 -- the extra argument to CRecList in this implementation.
 synth' (RecList tgt base step) =
@@ -416,7 +416,7 @@ synth' (RecList tgt base step) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Not a List type: "), MVal t]
--- TODO continue bringing harmony with TLT appendix B
+-- ListE-2 on p. 380
 synth' (IndList tgt mot base step) =
   do SThe lstT tgt' <- synth tgt
      case lstT of
@@ -445,80 +445,7 @@ synth' (IndList tgt mot base step) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Not a List type: "), MVal t]
-
-synth' Trivial = return (SThe VU CTrivial)
-synth' Sole = return (SThe VTrivial CSole)
-synth' (Eq ty from to) =
-  do ty' <- check VU ty
-     tv <- eval ty'
-     from' <- check tv from
-     to' <- check tv to
-     return (SThe VU (CEq ty' from' to'))
-synth' (Cong tgt fun) =
-  do SThe tgtT tgt' <- synth tgt
-     SThe funT fun' <- synth fun
-     case tgtT of
-       VEq ty from to ->
-         case funT of
-           VPi x dom ran ->
-             do sameType ty dom
-                ran' <- instantiate ran x from
-                funV <- eval fun'
-                newFrom <- doApply funV from
-                newTo <- doApply funV to
-                ty' <- readBackType ran'
-                return (SThe (VEq ran' newFrom newTo) (CCong tgt' ty' fun'))
-           other ->
-             do t <- readBackType other
-                failure [MText (T.pack "Not an -> type: "), MVal t]
-       other ->
-         do t <- readBackType other
-            failure [MText (T.pack "Not an = type: "), MVal t]
-synth' (Replace tgt mot base) =
-  do SThe tgtT tgt' <- synth tgt
-     case tgtT of
-       VEq a from to ->
-         do motT <- evalInEnv (None :> (sym "A", a))
-                      (CPi (sym "x") (CVar (sym "A"))
-                        CU)
-            mot' <- check motT mot
-            motv <- eval mot'
-            baseT <- doApply motv from
-            base' <- check baseT base
-            ty <- doApply motv to
-            return (SThe ty (CReplace tgt' mot' base'))
-       other ->
-         do t <- readBackType other
-            failure [MText (T.pack "Not an = type: "), MVal t]
-synth' (Symm tgt) =
-  do SThe tgtT tgt' <- synth tgt
-     case tgtT of
-       VEq a from to ->
-         return (SThe (VEq a to from) (CSymm tgt'))
-       other ->
-         do t <- readBackType other
-            failure [MText (T.pack "Not an = type: "), MVal t]
-synth' (Trans p1 p2) =
-  do SThe t1 p1' <- synth p1
-     SThe t2 p2' <- synth p2
-     case t1 of
-       VEq a from mid ->
-         case t2 of
-           VEq b mid' to ->
-             do sameType a b
-                same a mid mid'
-                return (SThe (VEq a from to) (CTrans p1' p2'))
-           other2 ->
-             do notEq <- readBackType other2
-                failure [ MText (T.pack "Not an = type: "), MVal notEq]
-       other1 ->
-         do notEq <- readBackType other1
-            failure [ MText (T.pack "Not an = type: "), MVal notEq]
-synth' (List elem) =
-  do elem' <- check VU elem
-     return (SThe VU (CList elem'))
-synth' (Vec elem len) =
-  SThe VU <$> (CVec <$> check VU elem <*> check VNat len)
+-- VecE-1 on p. 381
 synth' (VecHead es) =
   do SThe esT es' <- synth es
      case esT of
@@ -534,6 +461,7 @@ synth' (VecHead es) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Expected a Vec, got a"), MVal t]
+-- VecE-2 on p. 381
 synth' (VecTail es) =
   do SThe esT es' <- synth es
      case esT of
@@ -549,6 +477,7 @@ synth' (VecTail es) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Expected a Vec, got a"), MVal t]
+-- VecE-3 on p. 382
 synth' (IndVec len es mot base step) =
   do len' <- check VNat len
      lenv <- eval len'
@@ -583,10 +512,91 @@ synth' (IndVec len es mot base step) =
        other ->
          do t <- readBackType other
             failure [MText (T.pack "Expected a Vec, got a"), MVal t]
-synth' (Either l r) =
-  do l' <- check VU l
-     r' <- check VU r
-     return (SThe VU (CEither l' r'))
+-- EqE-1 on p. 383
+synth' (Replace tgt mot base) =
+  do SThe tgtT tgt' <- synth tgt
+     case tgtT of
+       VEq a from to ->
+         do motT <- evalInEnv (None :> (sym "A", a))
+                      (CPi (sym "x") (CVar (sym "A"))
+                        CU)
+            mot' <- check motT mot
+            motv <- eval mot'
+            baseT <- doApply motv from
+            base' <- check baseT base
+            ty <- doApply motv to
+            return (SThe ty (CReplace tgt' mot' base'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not an = type: "), MVal t]
+-- EqE-2 on p. 384
+synth' (Cong tgt fun) =
+  do SThe tgtT tgt' <- synth tgt
+     SThe funT fun' <- synth fun
+     case tgtT of
+       VEq ty from to ->
+         case funT of
+           VPi x dom ran ->
+             do sameType ty dom
+                ran' <- instantiate ran x from
+                funV <- eval fun'
+                newFrom <- doApply funV from
+                newTo <- doApply funV to
+                ty' <- readBackType ran'
+                return (SThe (VEq ran' newFrom newTo) (CCong tgt' ty' fun'))
+           other ->
+             do t <- readBackType other
+                failure [MText (T.pack "Not an -> type: "), MVal t]
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not an = type: "), MVal t]
+-- EqE-3 on p. 384
+synth' (Symm tgt) =
+  do SThe tgtT tgt' <- synth tgt
+     case tgtT of
+       VEq a from to ->
+         return (SThe (VEq a to from) (CSymm tgt'))
+       other ->
+         do t <- readBackType other
+            failure [MText (T.pack "Not an = type: "), MVal t]
+-- EqE-4 on p. 385
+synth' (Trans p1 p2) =
+  do SThe t1 p1' <- synth p1
+     SThe t2 p2' <- synth p2
+     case t1 of
+       VEq a from mid ->
+         case t2 of
+           VEq b mid' to ->
+             do sameType a b
+                same a mid mid'
+                return (SThe (VEq a from to) (CTrans p1' p2'))
+           other2 ->
+             do notEq <- readBackType other2
+                failure [ MText (T.pack "Not an = type: "), MVal notEq]
+       other1 ->
+         do notEq <- readBackType other1
+            failure [ MText (T.pack "Not an = type: "), MVal notEq]
+-- EqE-5 on p. 385
+synth' (IndEq tgt mot base) =
+  do SThe tgtT tgt' <- synth tgt
+     case tgtT of
+       VEq a from to ->
+         do let env = None :> (sym "a", a) :> (sym "from", from)
+                motTy = VPi (sym "x") a
+                          (Closure env
+                            (CPi (sym "eq") (CEq (CVar (sym "a")) (CVar (sym "from")) (CVar (sym "x")))
+                              CU))
+            mot' <- check motTy mot
+            motv <- eval mot'
+            baseT <- doApplyMany motv [from, (VSame from)]
+            base' <- check baseT base
+            tgtv <- eval tgt'
+            ty <- doApplyMany motv [to, tgtv]
+            return (SThe ty (CIndEq tgt' mot' base'))
+       other ->
+         do notEq <- readBackType other
+            failure [ MText (T.pack "Not an = type: "), MVal notEq]
+-- EitherE on p. 386
 synth' (IndEither tgt mot l r) =
   do SThe tgtT tgt' <- synth tgt
      case tgtT of
@@ -614,6 +624,17 @@ synth' (IndEither tgt mot l r) =
             failure [ MText (T.pack "Not Either:")
                     , MVal t
                     ]
+-- TODO continue bringing harmony with the appendix
+synth' Sole = return (SThe VTrivial CSole)
+synth' (List elem) =
+  do elem' <- check VU elem
+     return (SThe VU (CList elem'))
+synth' (Vec elem len) =
+  SThe VU <$> (CVec <$> check VU elem <*> check VNat len)
+synth' (Either l r) =
+  do l' <- check VU l
+     r' <- check VU r
+     return (SThe VU (CEither l' r'))
 synth' Absurd = return (SThe VU CAbsurd)
 synth' (IndAbsurd tgt mot) =
   do tgt' <- check VAbsurd tgt
@@ -622,7 +643,14 @@ synth' (IndAbsurd tgt mot) =
      return (SThe motv (CIndAbsurd tgt' mot'))
 -- UI-1
 synth' Atom = pure (SThe VU CAtom)
+synth' Trivial = return (SThe VU CTrivial)
 synth' Nat = pure (SThe VU CNat)
+synth' (Eq ty from to) =
+  do ty' <- check VU ty
+     tv <- eval ty'
+     from' <- check tv from
+     to' <- check tv to
+     return (SThe VU (CEq ty' from' to'))
 synth' (Arrow dom (t:|ts)) =
   do x <- fresh (Symbol (T.pack "x"))
      dom' <- check VU  dom
