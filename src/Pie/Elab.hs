@@ -624,55 +624,17 @@ synth' (IndEither tgt mot l r) =
             failure [ MText (T.pack "Not Either:")
                     , MVal t
                     ]
--- TODO continue bringing harmony with the appendix
+-- TrivI on p. 387
 synth' Sole = return (SThe VTrivial CSole)
-synth' (List elem) =
-  do elem' <- check VU elem
-     return (SThe VU (CList elem'))
-synth' (Vec elem len) =
-  SThe VU <$> (CVec <$> check VU elem <*> check VNat len)
-synth' (Either l r) =
-  do l' <- check VU l
-     r' <- check VU r
-     return (SThe VU (CEither l' r'))
-synth' Absurd = return (SThe VU CAbsurd)
+-- AbsE on p. 388
 synth' (IndAbsurd tgt mot) =
   do tgt' <- check VAbsurd tgt
      mot' <- check VU mot
      motv <- eval mot'
      return (SThe motv (CIndAbsurd tgt' mot'))
--- UI-1
+-- UI-1 on p. 389
 synth' Atom = pure (SThe VU CAtom)
-synth' Trivial = return (SThe VU CTrivial)
-synth' Nat = pure (SThe VU CNat)
-synth' (Eq ty from to) =
-  do ty' <- check VU ty
-     tv <- eval ty'
-     from' <- check tv from
-     to' <- check tv to
-     return (SThe VU (CEq ty' from' to'))
-synth' (Arrow dom (t:|ts)) =
-  do x <- fresh (Symbol (T.pack "x"))
-     dom' <- check VU  dom
-     domVal <- eval dom'
-     ran' <- withCtxExtension x Nothing domVal $
-             case ts of
-               [] ->
-                 check VU t
-               (ty : tys) ->
-                 check' VU (Arrow t (ty :| tys))
-     return (SThe VU (CPi x dom' ran'))
-synth' (Pi ((loc, x, dom) :| doms) ran) =
-  do dom' <- check VU dom
-     domVal <- eval dom'
-     x' <- fresh x
-     ran' <- rename x x' $ withCtxExtension x' (Just loc) domVal $
-             case doms of
-               [] ->
-                 check VU ran
-               (y : ds) ->
-                 check' VU (Pi (y :| ds) ran)
-     return (SThe VU (CPi x' dom' ran'))
+-- UI-2 and UI-3 on p. 389
 synth' (Sigma ((loc, x, a) :| as) d) =
   do a' <- check VU a
      aVal <- eval a'
@@ -680,18 +642,73 @@ synth' (Sigma ((loc, x, a) :| as) d) =
      d' <- withCtxExtension x (Just loc) aVal $
              rename x x' $
              case as of
+               -- UI-2
                [] ->
                  check VU d
+               -- UI-3
                ((loc, y, d) : ds) ->
                  check' VU (Pi ((loc, y, d) :| ds) d)
      return (SThe VU (CSigma x a' d'))
+-- UI-4 on p. 389
 synth' (Pair a d) =
   do a' <- check VU a
      aVal <- eval a'
      x <- fresh (sym "a")
      d' <- withCtxExtension x Nothing aVal $ check VU d
      return (SThe VU (CSigma x a' d'))
-
+-- UI-5 and UI-6 on pp. 389, 390
+synth' (Pi ((loc, x, dom) :| doms) ran) =
+  do dom' <- check VU dom
+     domVal <- eval dom'
+     x' <- fresh x
+     ran' <- rename x x' $ withCtxExtension x' (Just loc) domVal $
+             case doms of
+               -- UI-5
+               [] ->
+                 check VU ran
+               -- UI-6
+               (y : ds) ->
+                 check' VU (Pi (y :| ds) ran)
+     return (SThe VU (CPi x' dom' ran'))
+-- UI-7 and UI-8 on p. 390
+synth' (Arrow dom (t:|ts)) =
+  do x <- fresh (Symbol (T.pack "x"))
+     dom' <- check VU  dom
+     domVal <- eval dom'
+     ran' <- withCtxExtension x Nothing domVal $
+             case ts of
+               -- UI-7
+               [] ->
+                 check VU t
+               -- UI-8
+               (ty : tys) ->
+                 check' VU (Arrow t (ty :| tys))
+     return (SThe VU (CPi x dom' ran'))
+-- UI-9 on p. 390
+synth' Nat = pure (SThe VU CNat)
+-- UI-10 on p. 390
+synth' (List elem) =
+  do elem' <- check VU elem
+     return (SThe VU (CList elem'))
+-- UI-11 on p. 390
+synth' (Vec elem len) =
+  SThe VU <$> (CVec <$> check VU elem <*> check VNat len)
+-- UI-12 on p. 390
+synth' (Eq ty from to) =
+  do ty' <- check VU ty
+     tv <- eval ty'
+     from' <- check tv from
+     to' <- check tv to
+     return (SThe VU (CEq ty' from' to'))
+-- UI-13 on p. 391
+synth' (Either l r) =
+  do l' <- check VU l
+     r' <- check VU r
+     return (SThe VU (CEither l' r'))
+-- UI-14 on p. 391
+synth' Trivial = return (SThe VU CTrivial)
+-- UI-15 on p. 391
+synth' Absurd = return (SThe VU CAbsurd)
 synth' other =
   do loc <- currentLoc
      failure [ MText (T.pack "Can't synth")
@@ -705,7 +722,7 @@ check t e =
      inExpr e (const (logInfo (ExprHasType tc)))
      return res
 
--- ΣI
+-- ΣI on p. 372
 check' t (Cons a d) =
   case t of
     VSigma x aT dT ->
@@ -717,7 +734,7 @@ check' t (Cons a d) =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not a pair type"), MVal t']
-
+-- FunI-1 and FunI-2 on p. 373
 check' t (Lambda ((loc, x) :| xs) body) =
   case t of
     VPi y dom ran ->
@@ -725,10 +742,12 @@ check' t (Lambda ((loc, x) :| xs) body) =
          withCtxExtension z (Just loc) dom $
            do bodyT <- instantiate ran y (VNeu dom (NVar z))
               case xs of
+                -- FunI-1
                 [] ->
                   do body' <- rename x z $
                               check bodyT body
                      return (CLambda z body')
+                -- FunI-2
                 (y : ys) ->
                   do body' <- rename x z $
                               check' bodyT (Lambda (y :| ys) body)
@@ -736,39 +755,14 @@ check' t (Lambda ((loc, x) :| xs) body) =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not a function type"), MVal t']
-check' t (Same e) =
-  case t of
-    VEq ty from to ->
-      do e' <- check ty e
-         v <- eval e'
-         same ty from v
-         same ty v to
-         return (CSame e')
-
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not an equality type"), MVal t']
+-- ListI-1 on p. 378
 check' t ListNil =
   case t of
     VList elem -> return CListNil
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not a Vec type"), MVal t']
-check' t (VecCons e es) =
-  case t of
-    VVec elem len ->
-      case len of
-        VAdd1 k ->
-          CVecCons <$> check elem e <*> check (VVec elem k) es
-        otherLen ->
-          do len' <- readBack (NThe VNat otherLen)
-             failure [ MText (T.pack "Expected a non-zero length, got a Vec type with")
-                     , MVal len'
-                     , MText (T.pack "length.")]
-
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not a Vec type"), MVal t']
+-- VecI-1 on p. 381
 check' t VecNil =
   case t of
     VVec elem len ->
@@ -784,6 +778,36 @@ check' t VecNil =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not a Vec type"), MVal t']
+-- VecI-2 on p. 381
+check' t (VecCons e es) =
+  case t of
+    VVec elem len ->
+      case len of
+        VAdd1 k ->
+          CVecCons <$> check elem e <*> check (VVec elem k) es
+        otherLen ->
+          do len' <- readBack (NThe VNat otherLen)
+             failure [ MText (T.pack "Expected a non-zero length, got a Vec type with")
+                     , MVal len'
+                     , MText (T.pack "length.")]
+
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not a Vec type"), MVal t']
+-- EqI on p. 383
+check' t (Same e) =
+  case t of
+    VEq ty from to ->
+      do e' <- check ty e
+         v <- eval e'
+         same ty from v
+         same ty v to
+         return (CSame e')
+
+    other ->
+      do t' <- readBackType other
+         failure [MText (T.pack "Not an equality type"), MVal t']
+-- EitherI-1 on p. 386
 check' t (EitherLeft l) =
   case t of
     VEither lt _ ->
@@ -791,6 +815,7 @@ check' t (EitherLeft l) =
     other ->
       do t' <- readBackType other
          failure [MText (T.pack "Not Either"), MVal t']
+-- EitherI-2 on p. 386
 check' t (EitherRight r) =
   case t of
     VEither _ rt ->
@@ -815,34 +840,52 @@ check' t TODO =
       (:>) <$> processCtx ctx <*> fmap (\t -> (x, loc, t)) (readBackType ty)
     processCtx _ = return None
 
+-- Switch, p. 367
+-- This rule must come last because it uses a catch-all pattern.
 check' t other =
   do SThe t' other' <- synth' other
      sameType t t'
      return other'
 
+-- This checks the form of judgment Γ ⊢ e₁ ≡ e₂ : t
+same :: Value -> Value -> Value -> Elab ()
 same ty v1 v2 =
   do c1 <- readBack (NThe ty v1)
      c2 <- readBack (NThe ty v2)
      case alphaEquiv c1 c2 of
-       Left reason ->
+       Left (l, r) ->
          do t <- readBackType ty
-         -- TODO include specific reason as well
-            failure [ MVal c1
-                    , MText (T.pack "is not the same")
-                    , MVal t
-                    , MText (T.pack "as")
-                    , MVal c2
-                    ]
+            failure $ [ MVal c1
+                      , MText (T.pack "is not the same")
+                      , MVal t
+                      , MText (T.pack "as")
+                      , MVal c2
+                      ] ++
+                      if l /= c1
+                        then [ MText (T.pack "because")
+                             , MVal l
+                             , MText (T.pack "doesn't match")
+                             , MVal r
+                             ]
+                        else []
        Right _ -> pure ()
 
+-- This checks the form of judgment Γ ⊢ t₁ ≡ t₂ type
+sameType :: Value -> Value -> Elab ()
 sameType v1 v2 =
   do c1 <- readBackType v1
      c2 <- readBackType v2
      case alphaEquiv c1 c2 of
-       Left reason ->
-         -- TODO include specific reason as well
-         failure [ MVal c1
+       Left (l, r) ->
+         failure $ [ MVal c1
                  , MText (T.pack "is not the same type as")
                  , MVal c2
-                 ]
+                 ] ++
+                 if l /= c1
+                   then [ MText (T.pack "because")
+                        , MVal l
+                        , MText (T.pack "doesn't match")
+                        , MVal r
+                        ]
+                   else []
        Right _ -> pure ()
