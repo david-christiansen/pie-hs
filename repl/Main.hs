@@ -21,7 +21,7 @@ main =
      case args of
        [] ->
          do sayHello
-            repl (TopState None [])
+            repl (REPLState (TopState None []) Concise)
        [file] ->
          processFile file
        more ->
@@ -54,6 +54,9 @@ endPos input = Pos l c
           [] -> 1
           more -> T.length (last more)
 
+data REPLState = REPLState { topState :: TopState, verbosity :: Verbosity }
+
+data Verbosity = Verbose | Concise
 
 processFile :: FilePath -> IO ()
 processFile f =
@@ -66,7 +69,7 @@ processFile f =
          do let st = TopState None []
             let loc = Loc f (Pos 1 1) (endPos input)
             let (info, res) = runTopElab (mapM_ top parsed) st loc
-            dumpInfo info
+            dumpInfo Verbose info
             case res of
               Left err ->
                 do T.putStrLn (printErr input err)
@@ -74,28 +77,43 @@ processFile f =
               Right _ ->
                 exitSuccess
 
-dumpInfo infos =
-  traverse (T.putStrLn . dumpLocElabInfo)
-    (nub (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos)) *>
-  pure ()
+dumpInfo v infos =
+  do let allInfo = nub (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos)
+     case v of
+       Verbose -> traverse (T.putStrLn . dumpLocElabInfo) allInfo
+       Concise -> traverse (T.putStrLn . dumpLocElabInfo)
+                    (filter (concise . unLocate) allInfo)
+     pure ()
+  where
+    concise (ExampleOut _) = True
+    concise (FoundTODO _ _) = True
+    concise _ = False
 
-repl :: TopState -> IO ()
+repl :: REPLState -> IO ()
 repl st =
   do putStr "Π> "
      l <- getLine
-     if l == ":dump"
-       then print st *> repl st
-       else do let e = testParser (topLevel <* eof) l
-               case e of
-                 Left err ->
-                   T.putStrLn (printParseErr (T.pack l) err) *>
-                   repl st
-                 Right parsed@(Located loc _) ->
-                   do let (info, res) = runTopElab (top parsed) st loc
-                      dumpInfo info
-                      case res of
-                        Left err ->
-                          do T.putStrLn (printErr (T.pack l) err)
-                             repl st
-                        Right ((), st') ->
-                          repl st'
+     case l of
+       ":dump" ->
+         print (topState st) *> repl st
+       ":quit" ->
+         return ()
+       ":verbose" ->
+         repl st {verbosity = Verbose}
+       ":concise" ->
+         repl st {verbosity = Concise}
+       _ ->
+         let e = testParser (topLevel <* eof) l
+         in case e of
+              Left err ->
+                T.putStrLn (printParseErr (T.pack l) err) *>
+                repl st
+              Right parsed@(Located loc _) ->
+                do let (info, res) = runTopElab (top parsed) (topState st) loc
+                   dumpInfo (verbosity st) info
+                   case res of
+                     Left err ->
+                       do T.putStrLn (printErr (T.pack l) err)
+                          repl st
+                     Right ((), topOut) ->
+                       repl st { topState = topOut }
