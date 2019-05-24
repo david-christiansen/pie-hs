@@ -1,5 +1,6 @@
 module Main where
 
+import Data.Char
 import Data.List
 import Data.Traversable
 import Data.Text (Text)
@@ -81,19 +82,19 @@ dumpInfo v infos =
   do let allInfo = nub (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos)
      case v of
        Verbose -> traverse (T.putStrLn . dumpLocElabInfo) allInfo
-       Concise -> traverse (T.putStrLn . dumpLocElabInfo)
-                    (filter (concise . unLocate) allInfo)
+       Concise -> traverse T.putStrLn
+                    [ i | Just i <- map concise allInfo ]
      pure ()
   where
-    concise (ExampleOut _) = True
-    concise (FoundTODO _ _) = True
-    concise _ = False
+    concise (Located _ (ExampleOut c)) = Just (printCore c)
+    concise i@(Located _ (FoundTODO _ _)) = Just (dumpLocElabInfo i)
+    concise _ = Nothing
 
 repl :: REPLState -> IO ()
 repl st =
   do putStr "Π> "
      l <- getLine
-     case l of
+     case trim l of
        ":dump" ->
          print (topState st) *> repl st
        ":quit" ->
@@ -102,8 +103,20 @@ repl st =
          repl st {verbosity = Verbose}
        ":concise" ->
          repl st {verbosity = Concise}
+       ":help" ->
+         do putStrLn "This Pie REPL supports anything you can write in a Pie file."
+            putStrLn ""
+            putStrLn "Additional commands: "
+            putStrLn "  :help\tShow this message"
+            putStrLn "  :quit\tQuit"
+            putStrLn "  :verbose\tTurn on verbose output"
+            putStrLn "  :concise\tTurn on concise output (default)"
+            repl st
+       cmd@(':':_) ->
+         do putStrLn $ "Unknown command \"" ++ cmd ++ "\". Use :help for help."
+            repl st
        _ ->
-         let e = testParser (topLevel <* eof) l
+         let e = testParser (spacing *> topLevel <* eof) l
          in case e of
               Left err ->
                 T.putStrLn (printParseErr (T.pack l) err) *>
@@ -117,3 +130,5 @@ repl st =
                           repl st
                      Right ((), topOut) ->
                        repl st { topState = topOut }
+
+  where trim = dropWhile isSpace . reverse . dropWhile isSpace . reverse

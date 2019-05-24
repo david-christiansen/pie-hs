@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Pie.Output (dumpLocElabInfo, printInfo, printLoc, printParseErr, printErr) where
+module Pie.Output (dumpLocElabInfo, printCore, printInfo, printLoc, printParseErr, printErr) where
 
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
@@ -417,6 +417,9 @@ indentTextBlock i txt =
          T.unlines [ T.replicate i (T.singleton ' ') <> line
                    | line <- lines
                    ]
+
+printCore :: Core -> Text
+printCore c = execOutput (pp (fst (resugar c)))
 
 printInfo :: ElabInfo -> Text
 printInfo (ExprHasType c) =
