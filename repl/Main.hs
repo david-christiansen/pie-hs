@@ -6,6 +6,7 @@ import Data.Traversable
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import System.Console.GetOpt
 import System.Environment
 import System.Exit
 import System.IO
@@ -19,15 +20,28 @@ import Pie.Types
 main =
   do hSetBuffering stdout NoBuffering
      args <- getArgs
-     case args of
+     let (opts, others, errs) = getOpt Permute options args
+     let v = foldr (\ v _ -> v) Concise opts
+     case others of
        [] ->
          do sayHello
-            repl (REPLState (TopState None []) Concise)
+            repl (REPLState (TopState None []) v)
        [file] ->
-         processFile file
+         processFile v file
        more ->
          do printUsage
             exitFailure
+
+
+options :: [OptDescr Verbosity]
+options =
+  [ Option [] ["verbose"]
+      (NoArg Verbose)
+      "Use verbose output"
+  , Option [] ["concise"]
+      (NoArg Concise)
+      "Use concise output"
+  ]
 
 sayHello =
   do putStrLn "   _______ _    __  "
@@ -43,8 +57,9 @@ sayHello =
 
 printUsage =
   do putStrLn "Usage:"
-     putStrLn "\t pie\tRun the Pie REPL"
-     putStrLn "\t pie FILE\tLoad FILE in Pie"
+     putStrLn "\t pie [OPTS]     \tRun the Pie REPL"
+     putStrLn "\t pie [OPTS] FILE\tLoad FILE in Pie"
+     putStrLn $ usageInfo "Options:" options
 
 endPos :: Text -> Pos
 endPos input = Pos l c
@@ -59,8 +74,8 @@ data REPLState = REPLState { topState :: TopState, verbosity :: Verbosity }
 
 data Verbosity = Verbose | Concise
 
-processFile :: FilePath -> IO ()
-processFile f =
+processFile :: Verbosity -> FilePath -> IO ()
+processFile v f =
   do input <- T.readFile f
      case startParsing f input program of
        Left err ->
@@ -70,7 +85,7 @@ processFile f =
          do let st = TopState None []
             let loc = Loc f (Pos 1 1) (endPos input)
             let (info, res) = runTopElab (mapM_ top parsed) st loc
-            dumpInfo Verbose info
+            dumpInfo v True info
             case res of
               Left err ->
                 do T.putStrLn (printErr input err)
@@ -78,17 +93,25 @@ processFile f =
               Right _ ->
                 exitSuccess
 
-dumpInfo v infos =
+
+dumpInfo v showLoc infos =
   do let allInfo = nub (sortBy (\x y -> compare (getLoc x) (getLoc y)) infos)
      case v of
        Verbose -> traverse (T.putStrLn . dumpLocElabInfo) allInfo
-       Concise -> traverse T.putStrLn
-                    [ i | Just i <- map concise allInfo ]
+       Concise -> traverse T.putStrLn $
+                    if showLoc
+                      then [ i | Just i <- map conciseLoc allInfo ]
+                      else [ i | Just i <- map concise allInfo ]
      pure ()
   where
     concise (Located _ (ExampleOut c)) = Just (printCore c)
     concise i@(Located _ (FoundTODO _ _)) = Just (dumpLocElabInfo i)
     concise _ = Nothing
+    conciseLoc i@(Located _ (ExampleOut c)) = Just (dumpLocElabInfo i)
+    conciseLoc i@(Located _ (FoundTODO _ _)) = Just (dumpLocElabInfo i)
+    conciseLoc _ = Nothing
+
+
 
 repl :: REPLState -> IO ()
 repl st =
@@ -123,7 +146,7 @@ repl st =
                 repl st
               Right parsed@(Located loc _) ->
                 do let (info, res) = runTopElab (top parsed) (topState st) loc
-                   dumpInfo (verbosity st) info
+                   dumpInfo (verbosity st) False info
                    case res of
                      Left err ->
                        do T.putStrLn (printErr (T.pack l) err)
