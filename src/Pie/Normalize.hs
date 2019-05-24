@@ -421,12 +421,14 @@ readBack :: Normal -> Norm Core
 readBack (NThe VAtom (VTick x)) = return (CTick x)
 readBack (NThe VNat  VZero) = return CZero
 readBack (NThe VNat (VAdd1 k)) = CAdd1 <$> readBack (NThe VNat k)
+  -- FunSame-η on p. 374
 readBack (NThe (VPi x dom ran) fun) =
   do y <- fresh (baseName x fun)
      let yVal = VNeu dom (NVar y)
      bodyVal <- doApply fun yVal
      bodyType <- instantiate ran x yVal
      CLambda y <$> readBack (NThe bodyType bodyVal)
+-- ΣSame-η on p. 372
 readBack (NThe (VSigma x aT dT) p) =
   do av <- doCar p
      a <- readBack (NThe aT av)
@@ -434,6 +436,7 @@ readBack (NThe (VSigma x aT dT) p) =
      dv <- doCdr p
      d <- readBack (NThe dT' dv)
      return (CCons a d)
+-- TrivSame-η on p. 388
 readBack (NThe VTrivial _) = return CSole
 readBack (NThe (VEq ty _ _) (VSame v)) = CSame <$> readBack (NThe ty v)
 readBack (NThe (VList _) VListNil) = return CListNil
@@ -444,6 +447,7 @@ readBack (NThe (VVec elem (VAdd1 len)) (VVecCons v vs)) =
   CVecCons <$> readBack (NThe elem v) <*> readBack (NThe (VVec elem len) vs)
 readBack (NThe (VEither lt _) (VLeft l)) = CLeft <$> readBack (NThe lt l)
 readBack (NThe (VEither _ rt) (VRight r)) = CRight <$> readBack (NThe rt r)
+-- Part of AbsSame-η on p. 388 - see alphaEquiv for the other part.
 readBack (NThe VAbsurd (VNeu _ ne)) = CThe CAbsurd <$> readBackNeutral ne
 readBack (NThe VU t) = readBackType t
 readBack (NThe t (VNeu t' neu)) =
@@ -545,6 +549,7 @@ readBackNeutral (NIndEither ne mot l r) =
              <*> readBack mot
              <*> readBack l
              <*> readBack r
+-- Part of AbsSame-η on p. 388 - see alphaEquiv for the other part.
 readBackNeutral (NIndAbsurd ne mot) =
   CIndAbsurd <$> (CThe CAbsurd <$> readBackNeutral ne)
              <*> readBack mot

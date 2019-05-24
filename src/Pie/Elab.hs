@@ -166,8 +166,6 @@ isType e =
      inExpr e (const (logInfo ExprIsType))
      return res
 
--- TODO Consider splitting the nested formation rules for →, Π, Σ at top-level
--- for consistency with inference rule presentation
 isType' :: (Expr' Loc) -> Elab Core
 -- AtomF on p. 371
 isType' Atom = pure CAtom
