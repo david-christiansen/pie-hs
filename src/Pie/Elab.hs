@@ -709,7 +709,6 @@ synth' Trivial = return (SThe VU CTrivial)
 -- UI-15 on p. 391
 synth' Absurd = return (SThe VU CAbsurd)
 synth' other =
-  do loc <- currentLoc
      failure [ MText (T.pack "Can't synth")
              , MText (T.pack (show other)) -- TODO better representation
              ]
