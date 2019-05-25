@@ -17,6 +17,7 @@ import Pie.Parse
 import Pie.TopLevel
 import Pie.Types
 
+main :: IO ()
 main =
   do hSetBuffering stdout NoBuffering
      args <- getArgs
@@ -58,7 +59,7 @@ sayHello =
 printUsage =
   do putStrLn "Usage:"
      putStrLn "\t pie [OPTS]     \tRun the Pie REPL"
-     putStrLn "\t pie [OPTS] FILE\tLoad FILE in Pie"
+     putStrLn "\t pie [OPTS] FILE\tCheck FILE in Pie"
      putStrLn $ usageInfo "Options:" options
 
 endPos :: Text -> Pos
@@ -74,13 +75,12 @@ data REPLState = REPLState { topState :: TopState, verbosity :: Verbosity }
 
 data Verbosity = Verbose | Concise
 
-processFile :: Verbosity -> FilePath -> IO ()
-processFile v f =
+loadFile :: Verbosity -> FilePath -> IO (Either Text TopState)
+loadFile v f =
   do input <- T.readFile f
      case startParsing f input program of
        Left err ->
-         do putStrLn (show err)
-            exitFailure
+         return (Left (T.pack (show err)))
        Right (parsed, _) ->
          do let st = TopState None []
             let loc = Loc f (Pos 1 1) (endPos input)
@@ -88,10 +88,21 @@ processFile v f =
             dumpInfo v True info
             case res of
               Left err ->
-                do T.putStrLn (printErr input err)
-                   exitFailure
-              Right _ ->
-                exitSuccess
+                return (Left (printErr input err))
+              Right ((), st) ->
+                return (Right st)
+
+
+
+processFile :: Verbosity -> FilePath -> IO ()
+processFile v f =
+  do res <- loadFile v f
+     case res of
+       Left err ->
+         do T.putStrLn err
+            exitFailure
+       Right _ ->
+         exitSuccess
 
 
 dumpInfo v showLoc infos =
@@ -132,9 +143,21 @@ repl st =
             putStrLn "Additional commands: "
             putStrLn "  :help\tShow this message"
             putStrLn "  :quit\tQuit"
+            putStrLn "  :load FILE\tLoad FILE"
             putStrLn "  :verbose\tTurn on verbose output"
             putStrLn "  :concise\tTurn on concise output (default)"
             repl st
+       (':':'l':'o':'a':'d':' ':file) ->
+         do let fn = dropWhile isSpace file
+            res <- loadFile (verbosity st) fn
+            case res of
+              Left err ->
+                do T.putStrLn err
+                   putStrLn ("File \"" ++ fn ++ "\"not loaded.")
+                   repl (REPLState (TopState None []) (verbosity st))
+              Right st' ->
+                repl st { topState = st' }
+
        cmd@(':':_) ->
          do putStrLn $ "Unknown command \"" ++ cmd ++ "\". Use :help for help."
             repl st
