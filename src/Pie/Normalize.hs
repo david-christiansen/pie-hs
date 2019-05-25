@@ -354,8 +354,9 @@ indVecMotTy elem =
 
 doHead (VVecCons e _) = return e
 doHead (VNeu (VVec elem _) ne) = return (VNeu elem (NHead ne))
+doHead other = error (show other)
 
-doTail (VVecCons e _) = return e
+doTail (VVecCons _ es) = return es
 doTail (VNeu (VVec elem (VAdd1 k)) ne) = return (VNeu (VVec elem k) (NTail ne))
 
 doIndVec VZero VVecNil mot base step = return base
