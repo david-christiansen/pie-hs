@@ -111,7 +111,6 @@ runElabErr act =
      return (info, res)
 
 
--- TODO prevent double claims
 addClaim :: Symbol -> Loc -> Value -> TopElab ()
 addClaim x loc ty =
   TopElab (\st _ ->
@@ -169,11 +168,21 @@ addDef x loc ty def =
 addRename :: Symbol -> Symbol -> TopElab ()
 addRename x x' = modify (\st -> st { topRename = (x, x') : topRename st })
 
+ensureAvailable :: Loc -> Symbol -> TopElab ()
+ensureAvailable loc x =
+  do ren <- topRename <$> get
+     case lookup x ren of
+       Just _ ->
+         failure (ElabErr (Located loc [MText (T.pack "Already claimed or defined: "), MVal (CVar x)]))
+       Nothing ->
+         return ()
+
 top :: Located (TopLevel Expr) -> TopElab ()
 top (Located loc t) = withCurrentLoc loc (top' t)
 
 top' (Claim (Located xloc x) ty) =
-  do cTy <- runElab (E.isType ty)
+  do ensureAvailable xloc x
+     cTy <- runElab (E.isType ty)
      vTy <- runNorm (N.eval cTy)
      x' <- fresh x
      addClaim x' xloc vTy
