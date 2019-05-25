@@ -725,8 +725,9 @@ synth' Trivial = return (SThe VU CTrivial)
 -- UI-15 on p. 391
 synth' Absurd = return (SThe VU CAbsurd)
 synth' other =
-     failure [ MText (T.pack "Can't synth")
-             , MText (T.pack (show other)) -- TODO better representation
+     failure [ MText (T.pack "Can't synthesize a type for")
+             , MText (describeExpr other <> T.singleton '.')
+             , MText (T.pack "Try giving a type hint with \"the\".")
              ]
 
 check :: Value -> Expr -> Elab Core

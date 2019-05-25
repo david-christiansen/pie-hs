@@ -164,6 +164,57 @@ data Expr' loc = The (LocatedExpr loc) (LocatedExpr loc)
                | TODO
   deriving (Eq, Show)
 
+describeExpr :: Expr' loc -> Text
+describeExpr (The _ _) = T.pack "a type annotation"
+describeExpr (Var x) = T.pack "the variable " <> symbolName x
+describeExpr Atom = T.pack "Atom"
+describeExpr (Tick a) = T.pack "'" <> symbolName a
+describeExpr (Pair _ _) = T.pack "a Pair-expression"
+describeExpr (Sigma _ _) = T.pack "a Σ-expression"
+describeExpr (Cons _ _) = T.pack "a cons-expression"
+describeExpr (Car _) = T.pack "a car-expression"
+describeExpr (Cdr _) = T.pack "a cdr-expression"
+describeExpr (Arrow _ _) = T.pack "an arrow-expression"
+describeExpr (Pi _ _) = T.pack "a Π-expression"
+describeExpr (Lambda _ _) = T.pack "a λ-expression"
+describeExpr (App _ _) = T.pack "a function application"
+describeExpr Nat = T.pack "Nat"
+describeExpr Zero = T.pack "zero"
+describeExpr (Add1 _) = T.pack "an add1-expression"
+describeExpr (NatLit n) = T.pack "the natural number" <> T.pack (show n)
+describeExpr (WhichNat _ _ _) = T.pack "a which-Nat-expression"
+describeExpr (IterNat _ _ _) = T.pack "an iter-Nat-expression"
+describeExpr (RecNat _ _ _) = T.pack "a rec-Nat-expression"
+describeExpr (IndNat _ _ _ _) = T.pack "an ind-Nat-expression"
+describeExpr (List _) = T.pack "a List type"
+describeExpr ListNil = T.pack "the empty list nil"
+describeExpr (ListCons _ _) = T.pack "a ::-expression"
+describeExpr (RecList _ _ _) = T.pack "a rec-List-expression"
+describeExpr (IndList _ _ _ _) = T.pack "an ind-List-expression"
+describeExpr (Vec _ _) = T.pack "a Vec type"
+describeExpr VecNil = T.pack "the empty Vec vecnil"
+describeExpr (VecCons _ _) = T.pack "a vec::-expression"
+describeExpr (VecHead _) = T.pack "a head-expression"
+describeExpr (VecTail _) = T.pack "a tail-expression"
+describeExpr (IndVec _ _ _ _ _) = T.pack "an ind-Vec-expression"
+describeExpr (Eq _ _ _) = T.pack "an =-expression"
+describeExpr (Same _) = T.pack "a same-expression"
+describeExpr (Symm _) = T.pack "a symm-expression"
+describeExpr (Cong _ _) = T.pack "a cong-expression"
+describeExpr (Replace _ _ _) = T.pack "a replace-expression"
+describeExpr (Trans _ _) =  T.pack "a trans-expression"
+describeExpr (IndEq _ _ _) = T.pack "an ind-Eq-expression"
+describeExpr (Either _ _) = T.pack "an Either type"
+describeExpr (EitherLeft _) = T.pack "a left-expression"
+describeExpr (EitherRight _) = T.pack "a right-expression"
+describeExpr (IndEither _ _ _ _) = T.pack "an ind-Either-expression"
+describeExpr Trivial = T.pack "Trivial"
+describeExpr Sole = T.pack "sole"
+describeExpr Absurd = T.pack "Absurd"
+describeExpr (IndAbsurd _ _) =  T.pack "an ind-Absurd-expression"
+describeExpr U = T.pack "U"
+describeExpr TODO = T.pack "a TODO marker"
+
 data Core = CThe Core Core
           | CVar Symbol
           | CAtom
