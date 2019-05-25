@@ -17,6 +17,7 @@ data CtxEntry a = HasType (Maybe Loc) a
                 | Defined Loc a a -- ^ type then value
   deriving Show
 
+entryType :: CtxEntry a -> a
 entryType (HasType _ t) = t
 entryType (Defined _ t _) = t
 entryType (Claimed _ t) = t
@@ -274,7 +275,7 @@ findVar x None =
      failure [MText (T.pack "Unknown variable"), MVal (CVar x)]
 findVar x (ctx' :> (y, info))
   -- LookupStop on p. 370
-  | x == y =
+  | x == y && inScope info =
      pure (SThe (entryType info) (CVar x))
   -- LookupPop on p. 370
   | otherwise = findVar x ctx'
