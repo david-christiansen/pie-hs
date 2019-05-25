@@ -480,10 +480,16 @@ printErr :: Text -> ElabErr -> Text
 printErr input (ElabErr (Located loc msg)) =
     printLoc loc <> T.pack ": " <>
     highlightLoc input loc <>
-    mconcat (intersperse (T.pack " ") [showPart part | part <- msg])
+    mconcat (intersperse (T.singleton ' ') [showPart part | part <- msg])
   where
-    showPart (MText txt) = txt
-    showPart (MVal c) = execOutput (pp (fst (resugar c)))
+    showPart (MText txt) =
+      txt
+    showPart (MVal c) =
+      let e = fst (resugar c)
+          out = execOutput (pp e)
+      in if tiny e
+           then out
+           else indentTextBlock 2 out
 
 highlightLoc :: Text -> Loc -> Text
 highlightLoc input (Loc fn (Pos l1 c1) (Pos l2 c2)) =
