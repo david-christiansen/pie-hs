@@ -174,7 +174,7 @@ isType' (Sigma ((loc, x, a) :| as) d) =
   do a' <- isType a
      aVal <- eval a'
      x' <- fresh x
-     d' <- withCtxExtension x (Just loc) aVal $
+     d' <- withCtxExtension x' (Just loc) aVal $
            rename x x' $
              case as of
                -- ΣF-1
@@ -637,15 +637,15 @@ synth' (Sigma ((loc, x, a) :| as) d) =
   do a' <- check VU a
      aVal <- eval a'
      x' <- fresh x
-     d' <- withCtxExtension x (Just loc) aVal $
+     d' <- withCtxExtension x' (Just loc) aVal $
              rename x x' $
              case as of
                -- UI-2
                [] ->
                  check VU d
                -- UI-3
-               ((loc, y, d) : ds) ->
-                 check' VU (Pi ((loc, y, d) :| ds) d)
+               ((loc, y, nextA) : ds) ->
+                 check' VU (Sigma ((loc, y, nextA) :| ds) d)
      return (SThe VU (CSigma x a' d'))
 -- UI-4 on p. 389
 synth' (Pair a d) =
@@ -659,7 +659,8 @@ synth' (Pi ((loc, x, dom) :| doms) ran) =
   do dom' <- check VU dom
      domVal <- eval dom'
      x' <- fresh x
-     ran' <- rename x x' $ withCtxExtension x' (Just loc) domVal $
+     ran' <- withCtxExtension x' (Just loc) domVal $
+             rename x x' $
              case doms of
                -- UI-5
                [] ->
