@@ -87,7 +87,21 @@ applyRenaming :: Symbol -> Elab Symbol
 applyRenaming x =
   Elab (\ _ loc ren ->
           case lookup x ren of
-            Nothing -> ([], Left (ElabErr (Located loc [MText (T.pack ("Unknown variable")), MVal (CVar x), MText (T.pack ("in " ++ show ren))])))
+            Nothing ->
+              ([],
+               Left
+                (ElabErr
+                 (Located loc
+                   ([ MText (T.pack ("Unknown variable"))
+                    , MVal (CVar x)
+                    ] ++
+                    if ren /= []
+                      then
+                        [ MText (T.pack "in " <>
+                                 T.intercalate (T.pack ", ")
+                                   (map (symbolName . fst) (reverse ren)))
+                        ]
+                      else []))))
             Just y -> ([], pure y))
 
 rename :: Symbol -> Symbol -> Elab a -> Elab a
@@ -254,6 +268,7 @@ toplevel e =
      return (CThe t eN)
 
 -- Implements Γ ⊢ x lookup ⤳ X
+findVar :: Symbol -> Ctx Value -> Elab SynthResult
 findVar x None =
   do loc <- currentLoc
      failure [MText (T.pack "Unknown variable"), MVal (CVar x)]
