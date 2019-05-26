@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
+-- | Type checking and elaboration
 module Pie.Elab (
   -- * The type checker
   synth, check, isType, same, sameType,
@@ -48,7 +49,12 @@ names None = []
 names (ctx :> (x, _)) = x : names ctx
 
 
-
+-- | Elaboration, AKA type checking, has access to a current
+-- typechecking context, a current source location, and a renaming
+-- from user-chosen names to machine-chosen names. Elaboration
+-- produces a collection of information about the parts of the input
+-- that were successfully checked, and either an error message or a
+-- value.
 newtype Elab a =
   Elab
     { runElab ::

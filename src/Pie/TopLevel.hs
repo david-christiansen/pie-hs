@@ -1,6 +1,11 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Pie.TopLevel where
+-- | Processing top-level declarations (REPL statements or file contents).
+module Pie.TopLevel (
+  top,
+  TopState(..),
+  TopElab(..),
+  ) where
 
 import qualified Data.Text as T
 
@@ -11,11 +16,19 @@ import Pie.Normalize (Norm)
 import qualified Pie.Normalize as N
 import Pie.Types
 
-data TopState = TopState { topCtx :: Ctx Value
-                         , topRename :: [(Symbol, Symbol)]
-                         }
+-- | The state needed to process Pie top-level declarations
+data TopState =
+  TopState
+   { topCtx :: Ctx Value -- ^ The context, consisting of claims and definitions.
+   , topRename :: [(Symbol, Symbol)] -- ^ The renaming that explains
+                                     -- the relationship between
+                                     -- user-chosen names and their
+                                     -- unique realizations in the
+                                     -- core language.
+   }
   deriving Show
 
+-- | Top-level elaboration has access to the top-level state.
 newtype TopElab a =
   TopElab
     { runTopElab ::
@@ -177,6 +190,7 @@ ensureAvailable loc x =
        Nothing ->
          return ()
 
+-- | Process a top-level declaration.
 top :: Located (TopLevel Expr) -> TopElab ()
 top (Located loc t) = withCurrentLoc loc (top' t)
 

@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+-- | Checking expressions for alpha-equivalence.
 module Pie.AlphaEquiv (alphaEquiv) where
 
 import Pie.Types

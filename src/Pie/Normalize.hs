@@ -1,10 +1,32 @@
-module Pie.Normalize where
+-- | Normalization is the process that transforms expressions into
+-- their normal forms. This consists of two steps: evaluation, which
+-- carries out all the computation latent in an expression, finding a
+-- value; and reading back, which reconstruct's a value as an
+-- expression based on a type. This last step implements the η rules.
+module Pie.Normalize (
+  -- * The evaluator
+  eval,
+  instantiate,
+  -- ** Elimination forms
+  doApply,
+  doApplyMany,
+  doCar,
+  doCdr,
+  -- * Reading back into normal forms
+  readBack,
+  readBackType,
+  readBackNeutral,
+  -- * Datatypes and control structures
+  Norm(..)
+  ) where
 
 import Pie.AlphaEquiv
 import Pie.Fresh
 import Pie.Panic
 import Pie.Types
 
+-- | The normalization monad has access to a local collection of used
+-- names and a local run-time environment.
 newtype Norm a =
   Norm
     { runNorm :: [Symbol] -> Env Value -> a }
@@ -48,6 +70,9 @@ close expr =
 extend :: Env a -> Symbol -> a -> Env a
 extend env x v = env :> (x, v)
 
+-- | Given a closure, a name, and a value, evaluate the closure's body
+-- in the closure's environment extended with the provided name and
+-- value.
 instantiate :: Closure Value -> Symbol -> Value -> Norm Value
 instantiate (Closure env expr) x v =
   withEnv (extend env x v) $
@@ -63,6 +88,7 @@ var x = getEnv >>= var'
       | x == y    = return v
       | otherwise = var' env
 
+-- | Find the value of an expression.
 eval :: Core -> Norm Value
 eval (CTick x) = return (VTick x)
 eval CAtom     = return VAtom
@@ -178,7 +204,7 @@ eval (CTODO loc ty) =
   do tv <- eval ty
      return (VNeu tv (NTODO loc tv))
 
-
+-- | Apply a function to its argument.
 doApply :: Value -> Value -> Norm Value
 doApply (VLambda x clos) arg =
   instantiate clos x arg
@@ -187,14 +213,17 @@ doApply (VNeu (VPi x a b) f) arg =
        <*> pure (NApp f (NThe a arg))
 doApply other arg = panic ("Not a function: " ++ show other)
 
+-- | Apply a function to any number of arguments.
 doApplyMany fun [] = return fun
 doApplyMany fun (v:vs) =
   do fun' <- doApply fun v
      doApplyMany fun' vs
 
+-- | Find the first element of a pair.
 doCar (VCons a _) = pure a
 doCar (VNeu (VSigma x aT dT) ne) = pure (VNeu aT (NCar ne))
 
+-- | Find the second element of a pair.
 doCdr (VCons _ d) = pure d
 doCdr p@(VNeu (VSigma x aT dT) ne) =
   do a <- doCar p
@@ -418,6 +447,7 @@ baseName :: Symbol -> Value -> Symbol
 baseName def (VLambda x _) = x
 baseName def _ = def
 
+-- | Find the syntax of a normal form.
 readBack :: Normal -> Norm Core
 readBack (NThe VAtom (VTick x)) = return (CTick x)
 readBack (NThe VNat  VZero) = return CZero
@@ -461,6 +491,7 @@ readBack (NThe t (VNeu t' neu)) =
        Right () -> readBackNeutral neu
 readBack other = error (show other)
 
+-- | Find the normal form of a type's value.
 readBackType :: Value -> Norm Core
 readBackType VAtom = return CAtom
 readBackType VNat = return CNat
@@ -485,6 +516,8 @@ readBackType VU = return CU
 readBackType (VNeu VU ne) = readBackNeutral ne
 readBackType other = error (show other)
 
+-- | Find the normal form expression that corresponds to a neutral
+-- expression.
 readBackNeutral :: Neutral -> Norm Core
 readBackNeutral (NVar x) = return (CVar x)
 readBackNeutral (NWhichNat tgt base@(NThe t _) step) =
