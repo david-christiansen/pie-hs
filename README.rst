@@ -10,7 +10,7 @@ How to Use It
 -------------
 
 Compile the program with ``cabal v2-build``. Run the tests with
-``cabal v2-test``. Once it works, use ``cabal new-install`` to install
+``cabal v2-test``. Once it works, use ``cabal v2-install`` to install
 the binary somewhere.
 
 This implementation of Pie can be run in two modes:
