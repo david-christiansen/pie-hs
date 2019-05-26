@@ -60,6 +60,13 @@ of each subexpression that it successfully checks. While this
 information could serve as the basis for a good editor plugin, this
 has not yet been implemented.
 
+Readline support
+----------------
+
+The REPL in this implementation of Pie does not support arrow keys or
+other similar features. You can get rudimentary support for them using
+``rlwrap``.
+
 Design Guidelines
 -----------------
 
