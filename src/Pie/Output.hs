@@ -1,6 +1,16 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Pie.Output (dumpLocElabInfo, printCore, printInfo, printLoc, printParseErr, printErr) where
+-- | Utilities for displaying output to users
+module Pie.Output (
+  -- * Pretty-printing Pie
+  printCore,
+  -- * Displaying error messages
+  printParseErr, printErr,
+  -- * Displaying output from successful elaboration
+  dumpLocElabInfo, printInfo,
+  -- * Displaying source locations
+  printLoc
+  ) where
 
 import Data.List
 import Data.List.NonEmpty (NonEmpty(..))
@@ -418,9 +428,11 @@ indentTextBlock i txt =
                    | line <- lines
                    ]
 
+-- | Pretty-print a core expression, after resugaring it
 printCore :: Core -> Text
 printCore c = execOutput (pp (fst (resugar c)))
 
+-- | Display a particular piece of elaboration information.
 printInfo :: ElabInfo -> Text
 printInfo (ExprHasType c) =
   let expr = fst (resugar c)
@@ -472,10 +484,16 @@ printTODOCtx ctx =
 
     padTo w txt = T.replicate (w - T.length txt) (T.singleton ' ') <> txt
 
+-- | Display elaboration information.
 dumpLocElabInfo :: Located ElabInfo -> Text
 dumpLocElabInfo (Located loc info) =
   printLoc loc <> T.pack ": " <> printInfo info
 
+-- | Display an elaboration error (that is, a type error) with respect
+-- to the source document from which it arose.
+--
+-- The source document is used to construct a highlighted view of the
+-- source location.
 printErr :: Text -> ElabErr -> Text
 printErr input (ElabErr (Located loc msg)) =
     printLoc loc <> T.pack ": " <>
@@ -540,7 +558,10 @@ findLine n input = find' n (T.lines input)
       | otherwise = find' (n - 1) ls
     find' _ [] = Nothing
 
-
+-- | Display a parser error with respect to the input from which it arose.
+--
+-- The input is used to produce a highlighted version with a pointer
+-- to the specific location.
 printParseErr :: Text -> Positioned ParseErr -> Text
 printParseErr input (Positioned pos@(Pos l c) e) =
   mconcat

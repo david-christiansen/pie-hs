@@ -162,7 +162,7 @@ repl st =
          do putStrLn $ "Unknown command \"" ++ cmd ++ "\". Use :help for help."
             repl st
        _ ->
-         let e = testParser (spacing *> topLevel <* eof) l
+         let e = parse "<input>" (spacing *> topLevel <* eof) l
          in case e of
               Left err ->
                 T.putStrLn (printParseErr (T.pack l) err) *>

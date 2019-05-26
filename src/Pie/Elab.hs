@@ -1,6 +1,15 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Pie.Elab where
+module Pie.Elab (
+  -- * The type checker
+  synth, check, isType, same, sameType,
+  -- * The type checking monad
+  Elab(..),
+  -- * Datatypes
+  Ctx, CtxEntry(..), SynthResult(..),
+  -- * Helpers
+  names, toEnv
+  ) where
 
 import Data.Char (isLetter, isMark)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -12,9 +21,13 @@ import qualified Pie.Normalize as Norm
 import Pie.Panic
 import Pie.Types
 
-data CtxEntry a = HasType (Maybe Loc) a
-                | Claimed Loc a
-                | Defined Loc a a -- ^ type then value
+-- | Entries in a typing context (Γ).
+data CtxEntry a
+  = HasType (Maybe Loc) a -- ^ An ordinary local variable binding,
+                          -- with optional source location
+  | Claimed Loc a -- ^ A claim, which is not yet in scope but reserves
+                  -- a name to be defined with a particular type
+  | Defined Loc a a -- ^ A top-level definition, with type then value
   deriving Show
 
 entryType :: CtxEntry a -> a
@@ -26,8 +39,10 @@ inScope :: CtxEntry a -> Bool
 inScope (Claimed _ _) = False
 inScope _ = True
 
+-- | Typing contexts associate names with context entries.
 type Ctx a = Bwd (Symbol, CtxEntry a)
 
+-- | Extract the names in a context
 names :: Ctx a -> [Symbol]
 names None = []
 names (ctx :> (x, _)) = x : names ctx
@@ -119,6 +134,8 @@ withCtxExtension x loc t = withModifiedCtx (:> (x, HasType loc t))
 withCtx :: Ctx Value -> Elab a -> Elab a
 withCtx ctx = withModifiedCtx (const ctx)
 
+-- | Convert a type-checking context Γ into a run-time environment ρ.
+toEnv :: Ctx Value -> Env Value
 toEnv None = None
 toEnv (ctx :> (x, HasType _ t)) =
   toEnv ctx :> (x, VNeu t (NVar x))
@@ -175,6 +192,7 @@ inExpr (Expr loc e) act =
   Elab (\ ctx _ ren ->
           runElab (act e) ctx loc ren)
 
+-- | Check whether an expression is a type.
 isType :: Expr -> Elab Core
 isType e =
   do res <- inExpr e isType'
@@ -258,7 +276,11 @@ isType' U = pure CU
 isType' other = check' VU other
 
 
-data SynthResult = SThe { theType :: Value, theExpr :: Core }
+-- | The result of type synthesis
+data SynthResult =
+  SThe { theType :: Value -- ^ The type discovered for the expression
+       , theExpr :: Core  -- ^ The elaborated form of the expression
+       }
   deriving Show
 
 toplevel e =
@@ -281,7 +303,7 @@ findVar x (ctx' :> (y, info))
   | otherwise = findVar x ctx'
 
 
-
+-- | Attempt to synthesize a type for an expression.
 synth :: Expr -> Elab SynthResult
 synth e =
   do res@(SThe tv _) <- inExpr e synth'
@@ -730,6 +752,12 @@ synth' other =
              , MText (T.pack "Try giving a type hint with \"the\".")
              ]
 
+-- | Check an expression against a type.
+--
+-- The type is provided as a value, which has two benefits: all values
+-- are assumed to be produced from well-typed expressions, so we can
+-- assume that it is a type, and it ensures that there is no residual
+-- computation to be performed at the top of the type.
 check :: Value -> Expr -> Elab Core
 check t e =
   do res <- inExpr e (check' t)
@@ -862,8 +890,12 @@ check' t other =
      sameType t t'
      return other'
 
--- This checks the form of judgment Γ ⊢ e₁ ≡ e₂ : t
-same :: Value -> Value -> Value -> Elab ()
+-- | This checks the form of judgment Γ ⊢ e₁ ≡ e₂ : t, or in other
+-- words, whether two expressions are the same with respect to a type.
+--
+-- The expressions and type are given as values because they must have
+-- already been type checked.
+same :: Value {- ^ The type -} -> Value -> Value -> Elab ()
 same ty v1 v2 =
   do c1 <- readBack (NThe ty v1)
      c2 <- readBack (NThe ty v2)
@@ -885,7 +917,12 @@ same ty v1 v2 =
                         else []
        Right _ -> pure ()
 
--- This checks the form of judgment Γ ⊢ t₁ ≡ t₂ type
+-- | This checks the form of judgment Γ ⊢ t₁ ≡ t₂ type, or in other
+-- words, whether two expressions are in fact the same type.
+--
+-- The types are provided as values because one must have already
+-- checked that they are types prior to checking that they are the
+-- same type.
 sameType :: Value -> Value -> Elab ()
 sameType v1 v2 =
   do c1 <- readBackType v1

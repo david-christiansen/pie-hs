@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
+-- | Generating fresh variable names.
 module Pie.Fresh (freshen) where
 
 import Data.Char
@@ -10,7 +11,13 @@ import Data.Text.ICU
 
 import Pie.Types
 
-freshen :: [Symbol] -> Symbol -> Symbol
+-- | Generate a fresh name, using a provided name as a starting
+-- point. The result name will not occur in the list of used names
+-- provided.
+freshen ::
+  [Symbol] {- ^ The used names to avoid -} ->
+  Symbol {- ^ The name to start with -} ->
+  Symbol
 freshen used x =
   if x `elem` used
     then let split = splitName (symbolName x)

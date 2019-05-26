@@ -1,6 +1,20 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Pie.Parse where
+-- | The Pie parser
+module Pie.Parse (
+  -- * General parsing infrastructure
+  ParseErr(..),
+  -- ** Running parsers
+  parse,
+  startParsing,
+  keepParsing,
+  -- * Parsers
+  eof,
+  expr,
+  program,
+  spacing,
+  topLevel
+  ) where
 
 import Control.Applicative
 import Data.Char
@@ -14,9 +28,15 @@ import qualified Data.Text.ICU as ICU
 
 import Pie.Types
 
-data ParseErr = GenericParseErr
-              | Expected [Char] [Text]
-              | EOF
+-- | Things that could go wrong during parsing.
+data ParseErr
+  = GenericParseErr
+  -- ^ An unknown error (should never be shown to users)
+  | Expected [Char] [Text]
+  -- ^ The characters are expected specific characters, while the text
+  -- values are descriptions of expected productions.
+  | EOF
+  -- ^ An unexpected end of input was encountered.
   deriving Show
 
 expectedChar c = Expected [c] []
@@ -95,6 +115,7 @@ instance Monad Parser where
                 Right (x, st') ->
                   runParser (f x) ctx st')
 
+-- | A parser that matches only the end of the input.
 eof :: Parser ()
 eof = Parser (\ _ st ->
                 if T.null (currentInput st)
@@ -256,6 +277,7 @@ varName =
 kw k = token $ do x <- ident
                   if T.pack k == x then return () else empty
 
+-- | Consume zero or more spaces or comments.
 spacing :: Parser ()
 spacing =
   rep_ $
@@ -294,6 +316,7 @@ pair x y = (x, y)
 atLoc :: Parser (Located a) -> b -> Parser (Located b)
 atLoc p x = fmap (fmap (const x)) p
 
+-- | Parse a high-level expression.
 expr :: Parser Expr
 expr = do Located loc e <- expr'
           return (Expr loc e)
@@ -408,6 +431,8 @@ expr' = asum [ tick
     app = App <$> expr <*> rep1 expr
 
 
+-- | Parse a top-level declaration - that is, a claim, definition,
+-- example, or check-same form.
 topLevel :: Parser (Located (TopLevel Expr))
 topLevel = parensLoc topLevel' <|>
            ((\e@(Expr loc _) -> Located loc (Example e)) <$> expr)
@@ -418,17 +443,25 @@ topLevel' = claim <|> define <|> checkSame
     define = kw "define" *> (Define <$> varName <*> expr)
     checkSame = kw "check-same" *> (CheckSame <$> expr <*> expr <*> expr)
 
+-- | Parse a complete program that consists of @#lang pie@ followed by
+-- zero or more top-level declarations.
 program :: Parser [Located (TopLevel Expr)]
 program = hashLang *> rep topLevel <* eof
 
-testParser :: Parser a -> String -> Either (Positioned ParseErr) a
-testParser (Parser p) input =
+-- | Run a parser on a complete input.
+parse ::
+  String {- ^ The file name or description of the input source -} ->
+  Parser a {- ^ The parser to run against the input -} ->
+  String {- ^ The complete input to parse -} ->
+  Either (Positioned ParseErr) a
+parse src (Parser p) input =
   let initSt = ParserState (T.pack input) (Pos 1 1)
-      initCtx = ParserContext "<test input>"
+      initCtx = ParserContext src
   in case p initCtx initSt of
        Left err -> Left err
        Right (x, _) -> Right x
 
+-- | Use a partial result to continue parsing.
 keepParsing ::
   FilePath ->
   ParserState ->
@@ -437,6 +470,7 @@ keepParsing ::
 keepParsing file st (Parser p) =
   p (ParserContext file) st
 
+-- | Produce a partial result by parsing some prefix of the input.
 startParsing ::
   FilePath ->
   Text ->

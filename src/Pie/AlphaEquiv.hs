@@ -1,9 +1,13 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-
 module Pie.AlphaEquiv (alphaEquiv) where
 
 import Pie.Types
 
+-- | Check two core expressions for alpha-equivalence.
+--
+-- If they are alpha-equivalent, return @Right ()@. If they are not,
+-- return @Left@ wrapped around a pair of subexpressions that differ.
+alphaEquiv :: Core -> Core -> Either (Core, Core) ()
 alphaEquiv e1 e2 = runAlpha (equiv e1 e2) [] [] 0
 
 newtype Alpha a =
