@@ -4,6 +4,7 @@
 module Pie.Parse (
   -- * General parsing infrastructure
   ParseErr(..),
+  Parser,
   -- ** Running parsers
   parse,
   startParsing,
@@ -61,6 +62,7 @@ data ParserState =
     , currentPos :: Pos
     }
 
+-- | Parser computations.
 newtype Parser a =
   Parser
     { runParser ::

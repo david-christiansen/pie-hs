@@ -281,7 +281,7 @@ alpha = testGroup "α-equivalence" $
            Right _ -> True
 
 testTick = testGroup "Validity checking of atoms" $
-  [testCase ("'" ++ str ++ " OK") (mustElab (E.synth' (Tick (Symbol (T.pack str)))) *> pure ())
+  [testCase ("'" ++ str ++ " OK") (mustElab (E.synth (expr (Tick (Symbol (T.pack str))))) *> pure ())
   | str <- [ "food"
            , "food---"
            , "œ"
@@ -293,12 +293,13 @@ testTick = testGroup "Validity checking of atoms" $
            , "λάμβδα"
            ]
   ] ++
-  [testCase ("'" ++ str ++ " not OK") (mustNotElab (E.synth' (Tick (Symbol (T.pack str)))))
+  [testCase ("'" ++ str ++ " not OK") (mustNotElab (E.synth (expr (Tick (Symbol (T.pack str))))))
   | str <- [ "at0m"    -- contains 0
            , "\128758" -- canoe emoji
            ]
   ]
-
+  where expr = Expr fakeLoc
+        fakeLoc = Loc "nowhere" (Pos 1 1) (Pos 2 2)
 
 parsingSourceLocs = testGroup "Source locations from parser"
   [ testCase (show str) (parseTest str test)
@@ -306,7 +307,7 @@ parsingSourceLocs = testGroup "Source locations from parser"
   ]
   where
     parseTest str expected =
-      do res <- mustSucceed (P.testParser P.expr str)
+      do res <- mustSucceed (P.parse "<test input>" P.expr str)
          if res == expected
            then return ()
            else assertFailure str
@@ -352,7 +353,7 @@ mustFail (Right x) =
 
 
 mustParse :: P.Parser a -> String -> IO a
-mustParse p e = mustSucceed (P.testParser p e)
+mustParse p e = mustSucceed (P.parse "<test input>" p e)
 
 mustParseExpr :: String -> IO Expr
 mustParseExpr = mustParse P.expr
