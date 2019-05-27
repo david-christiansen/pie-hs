@@ -773,105 +773,73 @@ check t e =
 
 -- ΣI on p. 372
 check' t (Cons a d) =
-  case t of
-    VSigma x aT dT ->
-      do a' <- check aT a
-         av <- eval a'
-         dT' <- instantiate dT x av
-         d' <- check dT' d
-         return (CCons a' d')
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not a pair type"), MVal t']
+  do (x, aT, dT) <- isSigma t
+     a' <- check aT a
+     av <- eval a'
+     dT' <- instantiate dT x av
+     d' <- check dT' d
+     return (CCons a' d')
 -- FunI-1 and FunI-2 on p. 373
 check' t (Lambda ((loc, x) :| xs) body) =
-  case t of
-    VPi y dom ran ->
-      do z <- fresh x
-         withCtxExtension z (Just loc) dom $
-           do bodyT <- instantiate ran y (VNeu dom (NVar z))
-              case xs of
-                -- FunI-1
-                [] ->
-                  do body' <- rename x z $
-                              check bodyT body
-                     return (CLambda z body')
-                -- FunI-2
-                (y : ys) ->
-                  do body' <- rename x z $
-                              check' bodyT (Lambda (y :| ys) body)
-                     return (CLambda z body')
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not a function type"), MVal t']
+  do (y, dom, ran) <- isPi t
+     z <- fresh x
+     withCtxExtension z (Just loc) dom $
+       do bodyT <- instantiate ran y (VNeu dom (NVar z))
+          case xs of
+            -- FunI-1
+            [] ->
+              do body' <- rename x z $
+                          check bodyT body
+                 return (CLambda z body')
+            -- FunI-2
+            (y : ys) ->
+              do body' <- rename x z $
+                          check' bodyT (Lambda (y :| ys) body)
+                 return (CLambda z body')
 -- ListI-1 on p. 378
 check' t ListNil =
-  case t of
-    VList elem -> return CListNil
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not a Vec type"), MVal t']
+  do elem <- isList t
+     return CListNil
 -- VecI-1 on p. 381
 check' t VecNil =
-  case t of
-    VVec elem len ->
-      case len of
-        VZero ->
-          return CVecNil
-        otherLen ->
-          do len' <- readBack (NThe VNat otherLen)
-             failure [ MText (T.pack "Expected zero length in Vec, got a")
-                     , MVal len'
-                     , MText (T.pack "length.")]
-
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not a Vec type"), MVal t']
+  do (elem, len) <- isVec t
+     case len of
+       VZero ->
+         return CVecNil
+       otherLen ->
+         do len' <- readBack (NThe VNat otherLen)
+            failure [ MVal CVecNil
+                    , MText (T.pack "can be used where length 0 is expected, but here, length")
+                    , MVal len'
+                    , MText (T.pack "length.")]
 -- VecI-2 on p. 381
 check' t (VecCons e es) =
-  case t of
-    VVec elem len ->
-      case len of
-        VAdd1 k ->
-          CVecCons <$> check elem e <*> check (VVec elem k) es
-        otherLen ->
-          do len' <- readBack (NThe VNat otherLen)
-             failure [ MText (T.pack "Expected a non-zero length, got a Vec type with")
-                     , MVal len'
-                     , MText (T.pack "length.")]
-
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not a Vec type"), MVal t']
+  do (elem, len) <- isVec t
+     case len of
+       VAdd1 k ->
+         CVecCons <$> check elem e <*> check (VVec elem k) es
+       otherLen ->
+         do len' <- readBack (NThe VNat otherLen)
+            failure [ MText (T.pack "vecnil has a non-zero length, but was used in a context where")
+                    , MVal len'
+                    , MText (T.pack "length is expected.")]
 -- EqI on p. 383
 check' t (Same e) =
-  case t of
-    VEq ty from to ->
-      do e' <- check ty e
-         v <- eval e'
-         same ty from v
-         same ty v to
-         return (CSame e')
-
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not an equality type"), MVal t']
+  do (ty, from, to) <- isEq t
+     e' <- check ty e
+     v <- eval e'
+     same ty from v
+     same ty v to
+     return (CSame e')
 -- EitherI-1 on p. 386
 check' t (EitherLeft l) =
-  case t of
-    VEither lt _ ->
-      CLeft <$> check lt l
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not Either"), MVal t']
+  do (lt, _) <- isEither t
+     CLeft <$> check lt l
+
 -- EitherI-2 on p. 386
 check' t (EitherRight r) =
-  case t of
-    VEither _ rt ->
-      CRight <$> check rt r
-    other ->
-      do t' <- readBackType other
-         failure [MText (T.pack "Not Either"), MVal t']
+  do (_, rt) <- isEither t
+     CRight <$> check rt r
 check' t TODO =
   do t' <- readBackType t
      loc <- currentLoc
@@ -936,14 +904,50 @@ sameType v1 v2 =
      case alphaEquiv c1 c2 of
        Left (l, r) ->
          failure $ [ MVal c1
-                 , MText (T.pack "is not the same type as")
-                 , MVal c2
-                 ] ++
-                 if l /= c1
-                   then [ MText (T.pack "because")
-                        , MVal l
-                        , MText (T.pack "doesn't match")
-                        , MVal r
-                        ]
-                   else []
+                   , MText (T.pack "is not the same type as")
+                   , MVal c2
+                   ] ++
+                   if l /= c1
+                     then [ MText (T.pack "because")
+                          , MVal l
+                          , MText (T.pack "doesn't match")
+                          , MVal r
+                          ]
+                     else []
        Right _ -> pure ()
+
+
+-- The following helpers check that a type has a certain form.  They
+-- produce messages that assume they're running in checking mode.
+expected :: String -> Value -> Elab a
+expected what ty =
+  do t <- readBackType ty
+     failure [ MText (T.pack "The constructor works at")
+             , MText (T.pack what)
+             , MText (T.pack "but was used in a context expecting")
+             , MVal t
+             ]
+
+isPi :: Value -> Elab (Symbol, Value, Closure Value)
+isPi (VPi x a b) = return (x, a, b)
+isPi other = expected "a function type" other
+
+isSigma :: Value -> Elab (Symbol, Value, Closure Value)
+isSigma (VSigma x a b) = return (x, a, b)
+isSigma other = expected "a function type" other
+
+isList :: Value -> Elab Value
+isList (VList e) = return e
+isList other = expected "a list type" other
+
+isVec :: Value -> Elab (Value, Value)
+isVec (VVec e l) = return (e, l)
+isVec other = expected "a Vec type" other
+
+isEq :: Value -> Elab (Value, Value, Value)
+isEq (VEq t from to) = return (t, from, to)
+isEq other = expected "an equality type" other
+
+isEither :: Value -> Elab (Value, Value)
+isEither (VEither a b) = return (a, b)
+isEither other = expected "an Either type" other
