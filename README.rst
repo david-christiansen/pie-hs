@@ -67,6 +67,19 @@ The REPL in this implementation of Pie does not support arrow keys or
 other similar features. You can get rudimentary support for them using
 ``rlwrap``.
 
+Relationship to the Racket implementation
+-----------------------------------------
+
+I wrote this implementation so that people who know Haskell but not
+Racket would be able to read it and understand how the internals
+work. This one is probably not as nice to experiment with and/or use
+as the version written in Racket, as that version has many useful
+features in DrRacket, including tooltips on every expression showing
+its type, a pop-up list of TODOs, arrows from variables to their
+binding sites, auto-indentation support, "go to definition", and
+automatic renaming of variables. This version is just a batch-mode
+type checker and REPL.
+
 Design Guidelines
 -----------------
 
