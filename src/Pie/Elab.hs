@@ -13,6 +13,7 @@ module Pie.Elab (
   ) where
 
 import Data.Char (isLetter, isMark)
+import Data.Monoid ((<>))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Text as T
 
