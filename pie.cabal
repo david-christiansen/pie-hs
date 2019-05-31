@@ -15,6 +15,7 @@ maintainer:          david@davidchristiansen.dk
 category:            Language
 build-type:          Simple
 extra-source-files:  ChangeLog.md
+Tested-With:         GHC ==8.6.3 || ==8.4.4 || ==8.2.2 || == 8.0.2 || == 7.10.3 || == 7.8.4
 
 common all
   build-depends:       base >=4.9 && <4.13
