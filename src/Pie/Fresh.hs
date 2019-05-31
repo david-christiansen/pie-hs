@@ -7,7 +7,6 @@ import Data.Char
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.ICU
 
 import Pie.Types
 
@@ -33,23 +32,19 @@ freshen' used split =
 
 nameRegex = T.pack "^((?:[\\p{Letter}[0-9]]*[\\p{Letter}])?)([0-9₀₁₂₃₄₅₆₇₈₉]*)$"
 
-splitName :: Text -> (Text, Integer)
-splitName t =
-  case find (regex [] nameRegex) t of
-    Just m ->
-      let x = case group 1 m of
-                Just y
-                  | y == T.empty -> T.pack "x"
-                  | otherwise -> y
-                Nothing -> T.pack "x"
-          n = case group 2 m of
-                Just i
-                  | i == T.empty -> 1
-                  | otherwise -> read (asNonSubscript (T.unpack i))
-                Nothing -> 1
-      in (x, n)
-    Nothing -> (t, 1)
+isNameDigit :: Char -> Bool
+isNameDigit c = c `elem` "0123456789₀₁₂₃₄₅₆₇₈₉"
 
+splitName t =
+  let backwards = reverse (T.unpack t)
+      (digits, others) = span isNameDigit backwards
+      x = case reverse others of
+            [] -> "x"
+            nonEmpty -> nonEmpty
+      i = case reverse digits of
+            [] -> 1
+            nonEmpty -> read (asNonSubscript nonEmpty)
+  in (T.pack x, i)
 
 nextSplitName :: (txt, Integer) -> (txt, Integer)
 nextSplitName (base, i) = (base, i + 1)

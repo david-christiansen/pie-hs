@@ -19,8 +19,6 @@ extra-source-files:  ChangeLog.md
 common all
   build-depends:       base >=4.9 && <4.13
                      , text
-                     , text-icu ^>= 0.7
-
 
 
 library

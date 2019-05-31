@@ -25,7 +25,6 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.ICU as ICU
 
 import Pie.Types
 
@@ -170,6 +169,11 @@ litChar c =
   do c' <- char
      if c == c' then pure () else failure (expectedChar c)
 
+charMatching :: Text -> (Char -> Bool) -> Parser Char
+charMatching desc p =
+  do c <- char
+     if p c then pure c else failure (expectedDesc desc)
+
 rep :: Parser a -> Parser [a]
 rep p = ((:) <$> p <*> (rep p)) <|> pure []
 
@@ -210,22 +214,8 @@ spanning p =
                   })
      return matching
 
-regex :: Text -> [Char] -> Parser Text
-regex name rx =
-  do input <- currentInput <$> get
-     case (ICU.find theRegex input) >>= ICU.group 0  of
-       Nothing -> failure (expectedDesc name)
-       Just matching ->
-         do let rest = T.drop (T.length matching) input
-            modify (\st -> st { currentInput = rest
-                              , currentPos = forwardText (currentPos st) matching
-                              })
-            return matching
-  where
-    theRegex = ICU.regex [] (T.pack ('^' : rx))
-
 hashLang :: Parser ()
-hashLang = regex (T.pack "language identification") "#lang pie" *> spacing
+hashLang = string "#lang pie" *> spacing
 
 
 -- | The identifier rules from R6RS Scheme, minus hex escapes
@@ -292,7 +282,9 @@ spacing =
 
 
 lineComment :: Parser ()
-lineComment = regex (T.pack "line comment") ";[^\n]*\n" *> pure ()
+lineComment =
+  describe (T.pack "line comment")
+    (litChar ';' *> spanning (/= '\n') *> litChar '\n' *> pure ())
 
 exprComment :: Parser ()
 exprComment = ignore (token (string "#;") *> sexpr)
@@ -309,9 +301,14 @@ parensLoc p = do Located open _ <- token (litChar '(')
                  Located close _ <- token (litChar ')')
                  return (Located (spanLocs open close) res)
 
-natLit = do Located loc i <- token (regex (T.pack "natural number literal") "[0-9]+")
-            return (Located loc (NatLit (read (T.unpack i))))
+natLit =
+  do Located loc i <- token (describe (T.pack "natural number literal") digits)
+     return (Located loc (NatLit (read i)))
+  where
+    digits = NE.toList <$> rep1 (charMatching (T.pack "digit") isDigit)
 
+describe desc p =
+  p <|> failure (expectedDesc desc)
 
 pair x y = (x, y)
 
