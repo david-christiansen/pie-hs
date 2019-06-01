@@ -94,3 +94,10 @@ adheres to the following dogmas:
 2. Absolutely no language extensions. Haskell 2010 only.
 
 3. No monad transformers.
+
+
+Compiler and Library Support
+----------------------------
+
+Because it relies on ``Data.List.NonEmpty``, this package requires at
+least GHC 8.0.1.

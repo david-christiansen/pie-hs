@@ -1,0 +1,88 @@
+dist: xenial
+sudo: false
+
+language: c
+
+env:
+  global:
+    - PKGNAME=pie
+
+matrix:
+  include:
+    - env: CABALVER="2.4" GHCVER="8.4.1"
+      compiler: ": #GHC 8.4.1"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.1], sources: [hvr-ghc]}}
+    - env: CABALVER="2.4" GHCVER="8.2.2"
+      compiler: ": #GHC 8.2.2"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.2.2], sources: [hvr-ghc]}}
+    - env: CABALVER="2.4" GHCVER="8.0.2"
+      compiler: ": #GHC 8.0.2"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.0.2], sources: [hvr-ghc]}}
+
+  fast-finish: true
+
+cache:
+  directories:
+    - $HOME/.cabal/packages
+
+before_cache:
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/build-reports.log
+  - rm -fv $HOME/.cabal/packages/hackage.haskell.org/00-index.tar
+
+before_install:
+  - unset CC
+  - if [[ $TRAVIS_OS_NAME == 'linux' ]];
+    then
+        export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.cabal/bin:$PATH;
+        export SED=sed;
+        export ZCAT=zcat;
+    fi
+  - env
+  - if [[ $TRAVIS_OS_NAME == 'osx' ]];
+    then
+        brew outdated pkgconfig || brew install pkgconfig;
+        brew install ghc cabal-install libffi cppcheck gnu-sed;
+        export PATH=$HOME/.cabal/bin:$PATH;
+        export SED=gsed;
+        export ZCAT=gzcat;
+        export PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig:$PKG_CONFIG_PATH;
+    fi
+
+install:
+  - which cabal
+  - which ghc
+  - cabal --version
+  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - if [ -f $HOME/.cabal/packages/hackage.haskell.org/00-index.tar.gz ];
+    then
+      $ZCAT $HOME/.cabal/packages/hackage.haskell.org/00-index.tar.gz >
+              $HOME/.cabal/packages/hackage.haskell.org/00-index.tar;
+    fi
+  - travis_retry cabal v2-update -v
+  # Run build with 2 parallel jobs
+  # The container environment reports 16 cores,
+  # causing cabal's default configuration (jobs: $ncpus)
+  # to run into the GHC #9221 bug which can result in longer build-times.
+  - $SED -i -r 's/(^jobs:).*/\1 2/' $HOME/.cabal/config
+
+before_script:
+  - ORIGINAL_DIR=$(pwd)
+  - cabal v2-sdist
+  - cd ..
+  - tar -xf ${ORIGINAL_DIR}/dist-newstyle/sdist/${PKGNAME}*.tar.gz
+  - cd ${PKGNAME}*
+script:
+###
+  - echo 'Configure...' && echo -en 'travis_fold:start:script.configure\\r'
+  - cabal v2-configure --enable-tests
+  - echo -en 'travis_fold:end:script.configure\\r'
+###
+  - echo 'Build...' && echo -en 'travis_fold:start:script.build\\r'
+  - cabal v2-build
+  - echo -en 'travis_fold:end:script.build\\r'
+###
+  - echo 'Tests...' && echo -en 'travis_fold:start:script.tests\\r'
+  - cabal v2-test --enable-tests
+  - echo -en 'travis_fold:end:script.tests\\r'
+###
+# EOF
