@@ -3,10 +3,6 @@ sudo: false
 
 language: c
 
-os:
-  - linux
-  - osx
-
 env:
   global:
     - PKGNAME=pie
@@ -16,12 +12,16 @@ matrix:
     - env: CABALVER="2.4" GHCVER="8.4.1"
       compiler: ": #GHC 8.4.1"
       addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.1], sources: [hvr-ghc]}}
+      os: linux
     - env: CABALVER="2.4" GHCVER="8.2.2"
       compiler: ": #GHC 8.2.2"
       addons: {apt: {packages: [cabal-install-2.4,ghc-8.2.2], sources: [hvr-ghc]}}
+      os: linux
     - env: CABALVER="2.4" GHCVER="8.0.2"
       compiler: ": #GHC 8.0.2"
       addons: {apt: {packages: [cabal-install-2.4,ghc-8.0.2], sources: [hvr-ghc]}}
+      os: linux
+    - os: osx
 
   fast-finish: true
 
