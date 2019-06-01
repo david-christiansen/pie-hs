@@ -12,12 +12,16 @@ matrix:
     - env: CABALVER="2.4" GHCVER="8.4.1"
       compiler: ": #GHC 8.4.1"
       addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.1], sources: [hvr-ghc]}}
+      os: linux
     - env: CABALVER="2.4" GHCVER="8.2.2"
       compiler: ": #GHC 8.2.2"
       addons: {apt: {packages: [cabal-install-2.4,ghc-8.2.2], sources: [hvr-ghc]}}
+      os: linux
     - env: CABALVER="2.4" GHCVER="8.0.2"
       compiler: ": #GHC 8.0.2"
       addons: {apt: {packages: [cabal-install-2.4,ghc-8.0.2], sources: [hvr-ghc]}}
+      os: linux
+    - os: osx
 
   fast-finish: true
 
@@ -40,12 +44,12 @@ before_install:
   - env
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
     then
+        brew update
         brew outdated pkgconfig || brew install pkgconfig;
-        brew install ghc cabal-install libffi cppcheck gnu-sed;
+        brew install ghc cabal-install gnu-sed;
         export PATH=$HOME/.cabal/bin:$PATH;
         export SED=gsed;
         export ZCAT=gzcat;
-        export PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig:$PKG_CONFIG_PATH;
     fi
 
 install:
