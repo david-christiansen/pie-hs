@@ -69,7 +69,7 @@ before_script:
   - ORIGINAL_DIR=$(pwd)
   - cabal v2-sdist
   - cd ..
-  - tar -xf ${ORIGINAL_DIR}/dist-newstyle/${PKGNAME}*.tar.gz
+  - tar -xf ${ORIGINAL_DIR}/dist-newstyle/sdist/${PKGNAME}*.tar.gz
   - cd ${PKGNAME}*
 script:
 ###
