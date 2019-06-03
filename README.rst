@@ -11,7 +11,8 @@ How to Use It
 
 Compile the program with ``cabal v2-build``. Run the tests with
 ``cabal v2-test``. Once it works, use ``cabal v2-install`` to install
-the binary somewhere.
+the binary somewhere. Alternatively, you can use the ``stack build``,
+``stack test``, and ``stack install`` commands.
 
 This implementation of Pie can be run in two modes:
 
