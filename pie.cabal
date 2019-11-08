@@ -15,7 +15,7 @@ maintainer:          david@davidchristiansen.dk
 category:            Language
 build-type:          Simple
 extra-source-files:  
-Tested-With:         GHC ==8.6.3 || ==8.4.4 || ==8.2.2 || == 8.0.2
+Tested-With:         GHC ==8.8.1 || ==8.6.5 || ==8.4.4 || ==8.2.2 || == 8.0.2
 
 common all
   build-depends:       base >=4.9 && <4.14

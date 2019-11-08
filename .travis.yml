@@ -9,9 +9,17 @@ env:
 
 matrix:
   include:
-    - env: CABALVER="2.4" GHCVER="8.4.1"
-      compiler: ": #GHC 8.4.1"
-      addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.1], sources: [hvr-ghc]}}
+    - env: CABALVER="3.0" GHCVER="8.8.1"
+      compiler: ": #GHC 8.8.1"
+      addons: {apt: {packages: [cabal-install-3.0,ghc-8.8.1], sources: [hvr-ghc]}}
+      os: linux
+    - env: CABALVER="2.4" GHCVER="8.6.5"
+      compiler: ": #GHC 8.6.5"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.5], sources: [hvr-ghc]}}
+      os: linux
+    - env: CABALVER="2.4" GHCVER="8.4.4"
+      compiler: ": #GHC 8.4.4"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.4], sources: [hvr-ghc]}}
       os: linux
     - env: CABALVER="2.4" GHCVER="8.2.2"
       compiler: ": #GHC 8.2.2"
