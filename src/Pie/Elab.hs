@@ -821,9 +821,9 @@ check' t (VecCons e es) =
          CVecCons <$> check elem e <*> check (VVec elem k) es
        otherLen ->
          do len' <- readBack (NThe VNat otherLen)
-            failure [ MText (T.pack "vecnil has a non-zero length, but was used in a context where")
+            failure [ MText (T.pack "vec:: requires that the length have add1 at the top, but was used in a context that expects")
                     , MVal len'
-                    , MText (T.pack "length is expected.")]
+                    , MText (T.pack "for the length.")]
 -- EqI on p. 383
 check' t (Same e) =
   do (ty, from, to) <- isEq t
